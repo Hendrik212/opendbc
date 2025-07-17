@@ -188,13 +188,17 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
-  // ISLA speed warning beep silencing for Gen5W infotainment (2023 Ioniq 6)
+  // ISLA speed warning beep silencing + speed offset for Gen5W infotainment (2023 Ioniq 6)
   if (addr == 0x1fa && hyundai_isla_silence) {
     // Silence ISLA speed warning beep by setting ISLA_SpdWrn = 0
     // ISLA_SpdWrn is at bit 124-125 (byte 15, bits 4-5)
     // Modify the message data directly before it's sent
     uint8_t *msg_data = (uint8_t *)to_send->data;
     msg_data[15] &= ~(0x3U << 4);  // Clear bits 4-5 (ISLA_SpdWrn = 0 = "No Warning")
+    
+    // Set speed offset to 5 km/h tolerance before visual warning
+    // ISLA_SpdwOffst is at bit 112-119 (byte 14)
+    msg_data[14] = 5;  // 5 km/h offset before visual warning triggers
   }
 
   // ACCEL: safety check
