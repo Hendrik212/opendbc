@@ -66,6 +66,7 @@ class HyundaiSafetyFlags(IntFlag):
   CANFD_LKA_STEERING_ALT = 128
   FCEV_GAS = 256
   ALT_LIMITS_2 = 512
+  ISLA_SILENCE = 1024
 
 
 class HyundaiFlags(IntFlag):
@@ -86,45 +87,46 @@ class HyundaiFlags(IntFlag):
   SEND_LFA = 2 ** 7
   USE_FCA = 2 ** 8
   CANFD_LKA_STEERING_ALT = 2 ** 9
+  ISLA_SILENCE = 2 ** 10
 
   # these cars use a different gas signal
-  HYBRID = 2 ** 10
-  EV = 2 ** 11
+  HYBRID = 2 ** 11
+  EV = 2 ** 12
 
   # Static flags
 
   # If 0x500 is present on bus 1 it probably has a Mando radar outputting radar points.
   # If no points are outputted by default it might be possible to turn it on using  selfdrive/debug/hyundai_enable_radar_points.py
-  MANDO_RADAR = 2 ** 12
-  CANFD = 2 ** 13
+  MANDO_RADAR = 2 ** 13
+  CANFD = 2 ** 14
 
   # The radar does SCC on these cars when HDA I, rather than the camera
-  RADAR_SCC = 2 ** 14
+  RADAR_SCC = 2 ** 15
   # The camera does SCC on these cars, rather than the radar
-  CAMERA_SCC = 2 ** 15
-  CHECKSUM_CRC8 = 2 ** 16
-  CHECKSUM_6B = 2 ** 17
+  CAMERA_SCC = 2 ** 16
+  CHECKSUM_CRC8 = 2 ** 17
+  CHECKSUM_6B = 2 ** 18
 
   # these cars require a special panda safety mode due to missing counters and checksums in the messages
-  LEGACY = 2 ** 18
+  LEGACY = 2 ** 19
 
   # these cars have not been verified to work with longitudinal yet - radar disable, sending correct messages, etc.
-  UNSUPPORTED_LONGITUDINAL = 2 ** 19
+  UNSUPPORTED_LONGITUDINAL = 2 ** 20
 
   # These CAN FD cars do not accept communication control to disable the ADAS ECU,
   # responds with 0x7F2822 - 'conditions not correct'
-  CANFD_NO_RADAR_DISABLE = 2 ** 20
+  CANFD_NO_RADAR_DISABLE = 2 ** 21
 
-  CLUSTER_GEARS = 2 ** 21
-  TCU_GEARS = 2 ** 22
+  CLUSTER_GEARS = 2 ** 22
+  TCU_GEARS = 2 ** 23
 
-  MIN_STEER_32_MPH = 2 ** 23
+  MIN_STEER_32_MPH = 2 ** 24
 
-  HAS_LDA_BUTTON = 2 ** 24
+  HAS_LDA_BUTTON = 2 ** 25
 
-  FCEV = 2 ** 25
+  FCEV = 2 ** 26
 
-  ALT_LIMITS_2 = 2 ** 26
+  ALT_LIMITS_2 = 2 ** 27
 
 
 class Footnote(Enum):
@@ -356,7 +358,7 @@ class CAR(Platforms):
   HYUNDAI_IONIQ_6 = HyundaiCanFDPlatformConfig(
     [HyundaiCarDocs("Hyundai Ioniq 6 (with HDA II) 2023-24", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_p]))],
     HYUNDAI_IONIQ_5.specs,
-    flags=HyundaiFlags.EV | HyundaiFlags.CANFD_NO_RADAR_DISABLE,
+    flags=HyundaiFlags.EV | HyundaiFlags.CANFD_NO_RADAR_DISABLE | HyundaiFlags.ISLA_SILENCE,
   )
   HYUNDAI_TUCSON_4TH_GEN = HyundaiCanFDPlatformConfig(
     [
