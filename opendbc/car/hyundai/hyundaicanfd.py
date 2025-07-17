@@ -241,4 +241,4 @@ def create_isla_silence(packer, CAN, msg_1fa):
   values = msg_1fa.copy()
   values['ISLA_SpdWrn'] = 0  # 0 = "No Warning" (silence beeps)
   
-  return packer.make_can_msg("FR_CMR_02_100ms", CAN.ACAN, values)
+  return packer.make_can_msg("FR_CMR_02_100ms", CAN.ECAN, values)

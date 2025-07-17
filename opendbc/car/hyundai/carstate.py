@@ -305,7 +305,7 @@ class CarState(CarStateBase):
 
     # Store FR_CMR_02_100ms message for ISLA silencing
     if self.CP.flags & HyundaiFlags.ISLA_SILENCE:
-      self.msg_1fa = copy.copy(cp_cam.vl["FR_CMR_02_100ms"])
+      self.msg_1fa = copy.copy(cp.vl["FR_CMR_02_100ms"])
 
     return ret
 
@@ -356,7 +356,7 @@ class CarState(CarStateBase):
       ]
     
     if CP.flags & HyundaiFlags.ISLA_SILENCE:
-      cam_messages += [
+      pt_messages += [
         ("FR_CMR_02_100ms", 100),
       ]
 
