@@ -10,6 +10,7 @@
   HYUNDAI_CANFD_CRUISE_BUTTON_TX_MSGS(e_can)                        \
   {0x50,  a_can, 16, .check_relay = (a_can) == 0},  /* LKAS */      \
   {0x2A4, a_can, 24, .check_relay = (a_can) == 0},  /* CAM_0x2A4 */ \
+  {0x1FA, a_can, 16, .check_relay = true},          /* FR_CMR_02_100ms */ \
 
 #define HYUNDAI_CANFD_LKA_STEERING_ALT_COMMON_TX_MSGS(a_can, e_can) \
   HYUNDAI_CANFD_CRUISE_BUTTON_TX_MSGS(e_can)                        \
@@ -188,18 +189,6 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
-  // ISLA speed warning beep silencing + speed offset for Gen5W infotainment (2023 Ioniq 6)
-  if (addr == 0x1fa && hyundai_isla_silence) {
-    // Silence ISLA speed warning beep by setting ISLA_SpdWrn = 0
-    // ISLA_SpdWrn is at bit 124-125 (byte 15, bits 4-5)
-    // Modify the message data directly before it's sent
-    uint8_t *msg_data = (uint8_t *)to_send->data;
-    msg_data[15] &= ~(0x3U << 4);  // Clear bits 4-5 (ISLA_SpdWrn = 0 = "No Warning")
-    
-    // Set speed offset to 5 km/h tolerance before visual warning
-    // ISLA_SpdwOffst is at bit 112-119 (byte 14)
-    msg_data[14] = 5;  // 5 km/h offset before visual warning triggers
-  }
 
   // ACCEL: safety check
   if (addr == 0x1a0) {
