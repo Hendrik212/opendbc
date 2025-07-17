@@ -236,9 +236,10 @@ def create_adrv_messages(packer, CAN, frame):
 def create_isla_silence(packer, CAN, msg_1fa):
   # ISLA silencing for Gen5W infotainment (2023 Ioniq 6)
   # Modify FR_CMR_02_100ms to silence ISLA speed warning beeps
-  
+
   # Copy the original message and modify ISLA_SpdWrn signal
   values = msg_1fa.copy()
   values['ISLA_SpdWrn'] = 0  # 0 = "No Warning" (silence beeps)
-  
+  values['ISLA_IcyWrn'] = 1  # 1 = "Icy Road Warning" (keep icy road warning enabled)
+
   return packer.make_can_msg("FR_CMR_02_100ms", CAN.ECAN, values)
