@@ -237,8 +237,38 @@ def create_isla_silence(packer, CAN, msg_1fa):
   # ISLA silencing for Gen5W infotainment (2023 Ioniq 6)
   # Modify FR_CMR_02_100ms to silence ISLA speed warning beeps
 
-  # Copy original message - packer will now automatically handle CHECKSUM and COUNTER
-  values = msg_1fa.copy()
+  # Copy specific fields from original message like other functions do
+  values = {s: msg_1fa[s] for s in [
+    "COUNTER",
+    "CHECKSUM",
+    "ISLW_OptUsmSta",
+    "ISLW_SysSta", 
+    "ISLW_NoPassingInfoDis",
+    "ISLW_OvrlpSignDis",
+    "ISLW_SpdCluMainDis",
+    "ISLW_SpdNaviMainDis",
+    "ISLW_SubCondinfoSta1",
+    "ISLW_SubCondinfoSta2",
+    "ISLW_SpdCluSubMainDis",
+    "ISLW_SpdCluDisSubCond1",
+    "ISLW_SpdCluDisSubCond2",
+    "ISLW_SpdNaviSubMainDis",
+    "ISLW_SpdNaviDisSubCond1",
+    "ISLW_SpdNaviDisSubCond2",
+    "ISLA_SpdwOffst",
+    "ISLA_SwIgnoreReq",
+    "ISLA_SpdChgReq",
+    "ISLA_SpdWrn",
+    "ISLA_IcyWrn",
+    "ISLA_SymFlashMod",
+    "ISLA_Popup",
+    "ISLA_OptUsmSta",
+    "ISLA_OffstUsmSta",
+    "ISLA_AutoUsmSta",
+    "ISLA_Cntry",
+    "ISLA_AddtnlSign",
+    "ISLA_SchoolZone",
+  ]}
 
   # Modify ISLA signals - TESTING: Force warning on for stationary testing
   values['ISLA_SpdWrn'] = 1  # 1 = "Warning" - for testing while stationary
