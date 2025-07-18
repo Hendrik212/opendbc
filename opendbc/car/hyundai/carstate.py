@@ -303,6 +303,10 @@ class CarState(CarStateBase):
 
     ret.blockPcmEnable = not self.recent_button_interaction()
 
+    # Store FR_CMR_02_100ms message for ISLA silencing
+    if self.CP.flags & HyundaiFlags.ISLA_SILENCE:
+      self.msg_1fa = copy.copy(cp.vl["FR_CMR_02_100ms"])
+
     return ret
 
   def get_can_parsers_canfd(self, CP):
@@ -349,6 +353,11 @@ class CarState(CarStateBase):
     elif CP.flags & HyundaiFlags.CANFD_CAMERA_SCC:
       cam_messages += [
         ("SCC_CONTROL", 50),
+      ]
+    
+    if CP.flags & HyundaiFlags.ISLA_SILENCE:
+      pt_messages += [
+        ("FR_CMR_02_100ms", 100),
       ]
 
     return {
