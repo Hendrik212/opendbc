@@ -242,13 +242,10 @@ def create_isla_silence(packer, CAN, msg_1fa):
   # Keep original checksum and alive counter
   values["FR_CMR_Crc2Val"] = msg_1fa["FR_CMR_Crc2Val"]
   values["FR_CMR_AlvCnt2Val"] = msg_1fa["FR_CMR_AlvCnt2Val"]
-  
-  # Modify ISLA signals
-  values['ISLA_SpdWrn'] = 0  # 0 = "No Warning" (silence beeps)
-  values['ISLA_IcyWrn'] = 1  # 1 = "Icy Road Warning" (test filtering works)
-  values['ISLA_AutoUsmSta'] = 1  # 1 = "Auto Usm State" (test filtering works)
 
-  # Debug: Print when message is being modified
-  print(f"ISLA: Sending modified FR_CMR_02_100ms - ISLA_SpdWrn={values['ISLA_SpdWrn']}, ISLA_IcyWrn={values['ISLA_IcyWrn']}")
+  # Modify ISLA signals
+  values['ISLA_SpdWrn'] = 0
+  values['ISLA_AutoUsmSta'] = 2
+  values['ISLA_OffstUsmSta'] = 4
 
   return packer.make_can_msg("FR_CMR_02_100ms", CAN.ECAN, values)
