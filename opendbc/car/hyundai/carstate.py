@@ -354,10 +354,10 @@ class CarState(CarStateBase):
       cam_messages += [
         ("SCC_CONTROL", 50),
       ]
-    
+
     if CP.flags & HyundaiFlags.ISLA_SILENCE:
       pt_messages += [
-        ("FR_CMR_02_100ms", 100),
+        ("FR_CMR_02_100ms", 111),
       ]
 
     return {
