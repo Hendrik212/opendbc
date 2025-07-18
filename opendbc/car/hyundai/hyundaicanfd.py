@@ -241,7 +241,8 @@ def create_isla_silence(packer, CAN, msg_1fa):
   values = msg_1fa.copy()
   values['ISLA_SpdWrn'] = 0  # 0 = "No Warning" (silence beeps)
   values['ISLA_IcyWrn'] = 1  # 1 = "Icy Road Warning" (test filtering works)
-  
+  values['ISLA_AutoUsmSta'] = 1  # 0 = "Auto Usm State" (test filtering works)
+
   # Debug: Print when message is being modified
   print(f"ISLA: Sending modified FR_CMR_02_100ms - ISLA_SpdWrn={values['ISLA_SpdWrn']}, ISLA_IcyWrn={values['ISLA_IcyWrn']}")
 
