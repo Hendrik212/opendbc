@@ -473,8 +473,8 @@ BO_ 490 ADRV_0x1ea: 32 ADRV
  SG_ SET_ME_TMP_F_2 : 240|5@1+ (1,0) [0|31] "" XXX
 
 BO_ 506 FR_CMR_02_100ms: 32 FR_CMR
- SG_ FR_CMR_Crc2Val : 0|16@1+ (1,0) [0|65535] "" CGW
- SG_ FR_CMR_AlvCnt2Val : 16|8@1+ (1,0) [0|255] "" CGW
+ SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" CGW
+ SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" CGW
  SG_ ISLW_OptUsmSta : 24|2@1+ (1,0) [0|3] "" CLU,CGW
  SG_ ISLW_SysSta : 26|2@1+ (1,0) [0|3] "" CLU,CGW
  SG_ ISLW_NoPassingInfoDis : 28|3@1+ (1,0) [0|7] "" CLU,CGW
