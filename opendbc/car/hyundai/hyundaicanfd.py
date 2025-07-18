@@ -237,9 +237,11 @@ def create_isla_silence(packer, CAN, msg_1fa):
   # ISLA silencing for Gen5W infotainment (2023 Ioniq 6)
   # Modify FR_CMR_02_100ms to silence ISLA speed warning beeps
 
-  # Copy original message bytes like create_suppress_lfa pattern
-  values = {f"BYTE{i}": msg_1fa[f"BYTE{i}"] for i in range(16)}
-  values["COUNTER"] = msg_1fa["COUNTER"]
+  # Copy original message - no COUNTER, uses FR_CMR_AlvCnt2Val instead
+  values = msg_1fa.copy()
+  # Keep original checksum and alive counter
+  values["FR_CMR_Crc2Val"] = msg_1fa["FR_CMR_Crc2Val"]
+  values["FR_CMR_AlvCnt2Val"] = msg_1fa["FR_CMR_AlvCnt2Val"]
   
   # Modify ISLA signals
   values['ISLA_SpdWrn'] = 0  # 0 = "No Warning" (silence beeps)
@@ -249,4 +251,4 @@ def create_isla_silence(packer, CAN, msg_1fa):
   # Debug: Print when message is being modified
   print(f"ISLA: Sending modified FR_CMR_02_100ms - ISLA_SpdWrn={values['ISLA_SpdWrn']}, ISLA_IcyWrn={values['ISLA_IcyWrn']}")
 
-  return packer.make_can_msg("FR_CMR_02_100ms", CAN.ACAN, values)
+  return packer.make_can_msg("FR_CMR_02_100ms", CAN.ECAN, values)
