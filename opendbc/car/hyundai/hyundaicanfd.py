@@ -235,45 +235,17 @@ def create_adrv_messages(packer, CAN, frame):
 
 def create_isla_silence(packer, CAN, msg_1fa):
   # ISLA silencing for Gen5W infotainment (2023 Ioniq 6)
-  # Modify FR_CMR_02_100ms to silence ISLA speed warning beeps
+  # Complete signal control following CCNC pattern
 
-  # Copy specific fields from original message like other functions do
-  values = {s: msg_1fa[s] for s in [
-    "COUNTER",
-    "CHECKSUM",
-    "ISLW_OptUsmSta",
-    "ISLW_SysSta", 
-    "ISLW_NoPassingInfoDis",
-    "ISLW_OvrlpSignDis",
-    "ISLW_SpdCluMainDis",
-    "ISLW_SpdNaviMainDis",
-    "ISLW_SubCondinfoSta1",
-    "ISLW_SubCondinfoSta2",
-    "ISLW_SpdCluSubMainDis",
-    "ISLW_SpdCluDisSubCond1",
-    "ISLW_SpdCluDisSubCond2",
-    "ISLW_SpdNaviSubMainDis",
-    "ISLW_SpdNaviDisSubCond1",
-    "ISLW_SpdNaviDisSubCond2",
-    "ISLA_SpdwOffst",
-    "ISLA_SwIgnoreReq",
-    "ISLA_SpdChgReq",
-    "ISLA_SpdWrn",
-    "ISLA_IcyWrn",
-    "ISLA_SymFlashMod",
-    "ISLA_Popup",
-    "ISLA_OptUsmSta",
-    "ISLA_OffstUsmSta",
-    "ISLA_AutoUsmSta",
-    "ISLA_Cntry",
-    "ISLA_AddtnlSign",
-    "ISLA_SchoolZone",
-  ]}
+  # Copy all fields from original message like CCNC does
+  values = msg_1fa.copy()
 
-  # Modify ISLA signals - TESTING: Force warning on for stationary testing
-  values['ISLA_SpdWrn'] = 1  # 1 = "Warning" - for testing while stationary
-  values['ISLA_AutoUsmSta'] = 2
-  values['ISLA_OffstUsmSta'] = 4
-  values['ISLA_SymFlashMod'] = 1
+  # ISLA silencing - suppress speed warnings while preserving other functions
+  values['ISLA_SpdWrn'] = 0  # 0 = "No Warning" - silence beeps
+  values['ISLA_IcyWrn'] = 0  # 0 = "No Warning" - silence icy warnings
+  values['ISLA_AutoUsmSta'] = 2  # 2 = "Auto On" - keep auto function
+  values['ISLA_OffstUsmSta'] = 4  # 4 = "+5kph" - keep offset function
+  values['ISLA_SymFlashMod'] = 0  # 0 = "No Flashing" - no visual indicators
 
+  # Preserve all other ISLA and ISLW fields to maintain system functionality
   return packer.make_can_msg("FR_CMR_02_100ms", CAN.ECAN, values)
