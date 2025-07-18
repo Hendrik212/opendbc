@@ -240,8 +240,8 @@ def create_isla_silence(packer, CAN, msg_1fa):
   # Copy original message - packer will now automatically handle CHECKSUM and COUNTER
   values = msg_1fa.copy()
 
-  # Modify ISLA signals
-  values['ISLA_SpdWrn'] = 0
+  # Modify ISLA signals - TESTING: Force warning on for stationary testing
+  values['ISLA_SpdWrn'] = 1  # 1 = "Warning" - for testing while stationary
   values['ISLA_AutoUsmSta'] = 2
   values['ISLA_OffstUsmSta'] = 4
   values['ISLA_SymFlashMod'] = 1
