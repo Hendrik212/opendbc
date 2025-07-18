@@ -246,5 +246,6 @@ def create_isla_silence(packer, CAN, msg_1fa):
   values['ISLA_SpdWrn'] = 0
   values['ISLA_AutoUsmSta'] = 2
   values['ISLA_OffstUsmSta'] = 4
+  values['ISLA_SymFlashMod'] = 1
 
   return packer.make_can_msg("FR_CMR_02_100ms", CAN.ECAN, values)
