@@ -242,10 +242,17 @@ def create_isla_silence(packer, CAN, msg_1fa):
   values = msg_1fa.copy()
 
   # ISLA testing - force warning on for stationary testing
-  values['ISLA_SpdWrn'] = 0  # 1 = "Warning" - force beeps for testing
-  values['ISLA_AutoUsmSta'] = 2  # 2 = "Auto On" - keep auto function
-  values['ISLA_OffstUsmSta'] = 4  # 4 = "+5kph" - keep offset function
-  values['ISLA_SymFlashMod'] = 0  # 1 = "Flashing Sign" - visual test indicator
+  #values['ISLA_SpdWrn'] = 0  # 1 = "Warning" - force beeps for testing
+  #values['ISLA_AutoUsmSta'] = 2  # 2 = "Auto On" - keep auto function
+  #values['ISLA_OffstUsmSta'] = 4  # 4 = "+5kph" - keep offset function
+  #values['ISLA_SymFlashMod'] = 0  # 1 = "Flashing Sign" - visual test indicator
+  values['ISLA_OptUsmSta'] = 1
+  values['ISLW_SpdCluMainDis'] = values['ISLW_SpdNaviMainDis']
+
+
+
+
+
 
   # Preserve all other ISLA and ISLW fields to maintain system functionality
   return packer.make_can_msg("FR_CMR_02_100ms", CAN.ECAN, values)

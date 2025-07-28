@@ -214,7 +214,7 @@ class CarController(CarControllerBase):
             self.last_button_frame = self.frame
 
     # ISLA silencing - send modified FR_CMR_02_100ms at 10Hz
-    if self.frame % 10 == 0 and self.CP.flags & HyundaiFlags.ISLA_SILENCE:
+    if self.frame % 10 == 0:
       can_sends.append(hyundaicanfd.create_isla_silence(self.packer, self.CAN, CS.msg_1fa))
 
     return can_sends
