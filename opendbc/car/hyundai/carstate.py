@@ -327,7 +327,7 @@ class CarState(CarStateBase):
 
     if CP.flags & HyundaiFlags.ISLA_SILENCE:
       msgs += [
-        ("FR_CMR_02_100ms", 111),
+        ("FR_CMR_02_100ms", 100),
       ]
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),
