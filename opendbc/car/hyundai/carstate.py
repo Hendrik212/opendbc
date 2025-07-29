@@ -294,8 +294,8 @@ class CarState(CarStateBase):
     ret.blockPcmEnable = not self.recent_button_interaction()
 
     # Store FR_CMR_02_100ms message for ISLA silencing
-    if self.CP.flags & HyundaiFlags.ISLA_SILENCE:
-      self.msg_1fa = copy.copy(cp.vl["FR_CMR_02_100ms"])
+    #if self.CP.flags & HyundaiFlags.ISLA_SILENCE:
+    #  self.msg_1fa = copy.copy(cp.vl["FR_CMR_02_100ms"])
 
     return ret
 
@@ -325,10 +325,10 @@ class CarState(CarStateBase):
         ("SCC_CONTROL", 50),
       ]
 
-    if CP.flags & HyundaiFlags.ISLA_SILENCE:
-      msgs += [
-        ("FR_CMR_02_100ms", 100),
-      ]
+    #if CP.flags & HyundaiFlags.ISLA_SILENCE:
+    #  msgs += [
+    #    ("FR_CMR_02_100ms", 100),
+    #  ]
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).CAM),
