@@ -53,6 +53,7 @@ class CarController(CarControllerBase):
     self.apply_torque_last = 0
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0
+    self.isla_counter_last = None
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -213,8 +214,10 @@ class CarController(CarControllerBase):
               can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.RES_ACCEL))
             self.last_button_frame = self.frame
 
-    # ISLA silencing - send modified FR_CMR_02_100ms at 10Hz
-    if self.frame % 10 == 0:
+    # ISLA silencing - send modified FR_CMR_02_100ms at dynamic rate
+    isla_send_ready = CS.msg_1fa["COUNTER"] != self.isla_counter_last
+    if isla_send_ready:
       can_sends.append(hyundaicanfd.create_isla_silence(self.packer, self.CAN, CS.msg_1fa))
+    self.isla_counter_last = CS.msg_1fa["COUNTER"]
 
     return can_sends
