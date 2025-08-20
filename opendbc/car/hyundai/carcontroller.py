@@ -54,6 +54,7 @@ class CarController(CarControllerBase):
     self.apply_torque_last = 0
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0
+    self.buttons_counter_last = None
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -192,17 +193,15 @@ class CarController(CarControllerBase):
                                                          set_speed_in_units, hud_control))
         self.accel_last = accel
     else:
-      # button presses
-      if (self.frame - self.last_button_frame) * DT_CTRL > 0.25:
+      # button presses - use VW-style ready logic for better reliability
+      buttons_send_ready = CS.buttons_counter != self.buttons_counter_last
+      if buttons_send_ready and (CC.cruiseControl.cancel or CC.cruiseControl.resume):
         # cruise cancel
         if CC.cruiseControl.cancel:
           if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
             can_sends.append(hyundaicanfd.create_acc_cancel(self.packer, self.CP, self.CAN, CS.cruise_info))
-            self.last_button_frame = self.frame
           else:
-            for _ in range(20):
-              can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.CANCEL))
-            self.last_button_frame = self.frame
+            can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.CANCEL))
 
         # cruise standstill resume
         elif CC.cruiseControl.resume:
@@ -210,14 +209,15 @@ class CarController(CarControllerBase):
             # TODO: resume for alt button cars
             pass
           else:
-            for _ in range(20):
-              can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.RES_ACCEL))
-            self.last_button_frame = self.frame
+            can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.RES_ACCEL))
 
     # ISLA silencing - send modified FR_CMR_02_100ms at dynamic rate
     #isla_send_ready = CS.msg_1fa["COUNTER"] != self.isla_counter_last
     #if isla_send_ready:
     #  can_sends.append(hyundaicanfd.create_isla_silence(self.packer, self.CAN, CS.msg_1fa))
     #self.isla_counter_last = CS.msg_1fa["COUNTER"]
+
+    # Update button counter for next cycle (VW-style synchronization)
+    self.buttons_counter_last = CS.buttons_counter
 
     return can_sends
