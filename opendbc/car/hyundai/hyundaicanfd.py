@@ -115,7 +115,7 @@ def create_acc_cancel(packer, CP, CAN, cruise_info_copy):
       "CRUISE_STANDSTILL",
     ]}
   values.update({
-    "ACCMode": 4,
+    "ACCMode": 0,
     "aReqRaw": 0.0,
     "aReqValue": 0.0,
   })
