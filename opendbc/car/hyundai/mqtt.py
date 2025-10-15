@@ -7,9 +7,6 @@ Verified CAN Messages:
 """
 
 import cereal.messaging as messaging
-from opendbc.can.packer import CANPacker
-from openpilot.selfdrive.pandad import can_list_to_can_capnp
-from panda.python import Panda
 
 # Output metrics - initialized to sentinel values
 soc_out = -1.0
@@ -17,8 +14,6 @@ range_out = -1
 
 # CAN bus configuration
 sendcan = messaging.pub_sock('sendcan')
-dbc_name = 'hyundai_canfd'  # Ioniq 6 uses CAN FD
-packer = CANPacker(dbc_name)
 
 
 def getParsedMessages(msgs, bus, dat):
