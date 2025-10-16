@@ -1,10 +1,17 @@
 """
 MQTT Data Extraction for Hyundai Ioniq 6
 
-Verified CAN Messages:
-- 0x3b5 (Bus 1): Complete vehicle metrics in one message!
-  * Byte 16: Range - Direct km value
-  * Byte 22: Battery SOC - Divide by 3 for percentage
+✅ VERIFIED CAN Messages (captured during charging session 24% -> 31%):
+
+- 0x2fa (762, Bus 1): Battery SOC
+  * Byte 15: Battery SOC - Divide by 2 for percentage
+  * Example: 48 / 2 = 24.0%, 61 / 2 = 30.5%
+  * Verified progression: 24.0% -> 24.5% -> 25.0% -> 25.5% -> 26.0% -> 26.5% -> 28.0% -> 28.5% -> 29.0% -> 30.5%
+
+- 0x28d (653, Bus 1): Estimated Range
+  * Byte 24: Range in kilometers (direct value)
+  * Example: 136 km, 140 km, 144 km, 160 km
+  * Verified progression: 136 -> 137 -> 138 -> 139 -> 140 -> 144 -> 160 km
 """
 
 import cereal.messaging as messaging
@@ -21,9 +28,9 @@ def getParsedMessages(msgs, bus, dat):
     """
     Main parser function called by status.py to extract CAN data.
 
-    Ioniq 6 data from message 0x3b5 (Bus 1):
-    - Byte 16: Range in km (direct value)
-    - Byte 22: SOC percentage (divide by 3)
+    Hyundai Ioniq 6 verified metrics:
+    - 0x2fa (762) byte 15: SOC (divide by 2)
+    - 0x28d (653) byte 24: Range in km (direct value)
 
     Args:
         msgs: List of CAN messages from cereal
@@ -41,18 +48,21 @@ def getParsedMessages(msgs, bus, dat):
             data = can_msg.dat
             msg_bus = can_msg.src
 
-            # Message 0x3b5: Complete vehicle metrics (Bus 1)
-            # This single message contains both SOC and range!
-            if address == 0x3b5 and msg_bus == 1:
-                if len(data) >= 23:
-                    # Byte 16: Range in kilometers (direct value)
-                    range_km = data[16]
-                    range_out = range_km
+            # Message 0x2fa (762): Battery SOC (Bus 1)
+            if address == 0x2fa and msg_bus == 1:
+                if len(data) >= 16:
+                    # Byte 15: Battery SOC (divide by 2 for percentage)
+                    # Example: 48 / 2 = 24.0%, 61 / 2 = 30.5%
+                    soc_byte = data[15]
+                    soc_out = soc_byte / 2.0
 
-                    # Byte 22: Battery SOC (divide by 3 for percentage)
-                    # Example: 106 / 3 = 35.3%
-                    soc_byte = data[22]
-                    soc_out = soc_byte / 3.0
+            # Message 0x28d (653): Estimated Range (Bus 1)
+            if address == 0x28d and msg_bus == 1:
+                if len(data) >= 25:
+                    # Byte 24: Range in kilometers (direct value)
+                    # Example: 136 km, 140 km, 144 km, 160 km
+                    range_km = data[24]
+                    range_out = range_km
 
             # Store raw data for debugging
             dat[address] = data
