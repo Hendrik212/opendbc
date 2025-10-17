@@ -3,15 +3,16 @@ MQTT Data Extraction for Hyundai Ioniq 6
 
 ✅ VERIFIED CAN Messages (captured during charging session 24% -> 31%, 129km -> 164km):
 
-- 0x2fa (762, Bus 1): Battery SOC AND Range - BOTH in ONE message!
+- 0x2fa (762, Bus 1): Battery SOC
   * Byte 15: Battery SOC - Divide by 2 for percentage (0.5% resolution)
     - Example: 48 / 2 = 24.0%, 61 / 2 = 30.5%
     - Verified progression: 24.0% -> 24.5% -> 25.0% -> 25.5% -> 26.0% -> 26.5% -> 28.0% -> 28.5% -> 29.0% -> 30.5%
 
-  * Bytes 30-31: Estimated Range - 16-bit little-endian, divide by 4 (0.25 km resolution)
-    - Example: 0x0223 (547) / 4 = 136.75 km, 0x029C (668) / 4 = 167.00 km
-    - Verified progression: 136.75 -> 137.00 -> 138.00 -> 138.50 ... -> 167.00 km
-    - Monotonically increasing, higher precision than 0x2b5
+- 0x2b5 (693, Bus 1): Estimated Range
+  * Bytes 8-9: Range in kilometers (16-bit little-endian, direct value)
+    - Verified progression during charging: 129 -> 130 -> 131 -> 132 -> 136 -> 142 -> 144 -> 160 km
+    - Monotonically increasing (never drops) - cleanest signal
+    - Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
 """
 
 import cereal.messaging as messaging
@@ -28,9 +29,9 @@ def getParsedMessages(msgs, bus, dat):
     """
     Main parser function called by status.py to extract CAN data.
 
-    Hyundai Ioniq 6 verified metrics - BOTH in one message!
+    Hyundai Ioniq 6 verified metrics:
     - 0x2fa (762) byte 15: SOC (divide by 2, 0.5% resolution)
-    - 0x2fa (762) bytes 30-31: Range (16-bit LE, divide by 4, 0.25 km resolution)
+    - 0x2b5 (693) bytes 8-9: Range in km (16-bit little-endian, direct value)
 
     Args:
         msgs: List of CAN messages from cereal
@@ -48,20 +49,21 @@ def getParsedMessages(msgs, bus, dat):
             data = can_msg.dat
             msg_bus = can_msg.src
 
-            # Message 0x2fa (762): Battery SOC AND Range (Bus 1)
-            # Single message contains both metrics!
+            # Message 0x2fa (762): Battery SOC (Bus 1)
             if address == 0x2fa and msg_bus == 1:
-                if len(data) >= 32:
+                if len(data) >= 16:
                     # Byte 15: Battery SOC (divide by 2 for percentage, 0.5% resolution)
                     # Example: 48 / 2 = 24.0%, 61 / 2 = 30.5%
                     soc_byte = data[15]
                     soc_out = soc_byte / 2.0
 
-                    # Bytes 30-31: Estimated Range (16-bit little-endian, divide by 4, 0.25 km resolution)
-                    # Little-endian: byte 30 is low byte, byte 31 is high byte
-                    # Example: 0x0223 (547) / 4 = 136.75 km, 0x029C (668) / 4 = 167.00 km
-                    range_raw = data[30] | (data[31] << 8)
-                    range_out = range_raw / 4.0
+            # Message 0x2b5 (693): Estimated Range (Bus 1)
+            if address == 0x2b5 and msg_bus == 1:
+                if len(data) >= 10:
+                    # Bytes 8-9: Range in kilometers (16-bit little-endian, direct value)
+                    # Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
+                    range_km = data[8] | (data[9] << 8)
+                    range_out = range_km
 
             # Store raw data for debugging
             dat[address] = data
