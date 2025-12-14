@@ -25,12 +25,21 @@ class CarControllerParams:
     self.STEER_STEP = 1  # 100 Hz
 
     if CP.flags & HyundaiFlags.CANFD:
-      self.STEER_MAX = 270
-      self.STEER_DRIVER_ALLOWANCE = 250
-      self.STEER_DRIVER_MULTIPLIER = 2
-      self.STEER_THRESHOLD = 250
-      self.STEER_DELTA_UP = 2
-      self.STEER_DELTA_DOWN = 3
+      # Ioniq 6 has significantly improved steering with higher limits
+      if CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
+        self.STEER_MAX = 720
+        self.STEER_DELTA_UP = 10
+        self.STEER_DELTA_DOWN = 10
+        self.STEER_DRIVER_ALLOWANCE = 250
+        self.STEER_DRIVER_MULTIPLIER = 2
+        self.STEER_THRESHOLD = 250
+      else:
+        self.STEER_MAX = 270
+        self.STEER_DRIVER_ALLOWANCE = 250
+        self.STEER_DRIVER_MULTIPLIER = 2
+        self.STEER_THRESHOLD = 250
+        self.STEER_DELTA_UP = 2
+        self.STEER_DELTA_DOWN = 3
 
     # To determine the limit for your car, find the maximum value that the stock LKAS will request.
     # If the max stock LKAS request is <384, add your car to this list.
