@@ -55,7 +55,6 @@ class CarController(CarControllerBase):
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0
     self.openpilot_disabled_frame = 0
-    self.resume_button_alternate = False
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -215,12 +214,10 @@ class CarController(CarControllerBase):
 
         # cruise standstill resume
         elif CC.enabled and CS.out.standstill:
-          # Alternate between RES_ACCEL and SET_DECEL across resume attempts to keep set speed constant
-          button = Buttons.SET_DECEL if self.resume_button_alternate else Buttons.RES_ACCEL
+          # Use CANCEL button (push in) to resume without adjusting setpoint
           for _ in range(20):
-            can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, button))
+            can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.CANCEL))
           self.last_button_frame = self.frame
-          self.resume_button_alternate = not self.resume_button_alternate
 
     # ISLA silencing - send modified FR_CMR_02_100ms at dynamic rate
     #isla_send_ready = CS.msg_1fa["COUNTER"] != self.isla_counter_last
