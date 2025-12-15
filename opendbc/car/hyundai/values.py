@@ -25,11 +25,11 @@ class CarControllerParams:
     self.STEER_STEP = 1  # 100 Hz
 
     if CP.flags & HyundaiFlags.CANFD:
-      # Ioniq 6 has significantly improved steering with higher limits
+      # Ioniq 6 has improved steering with moderate limits to prevent wobble
       if CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
-        self.STEER_MAX = 720
-        self.STEER_DELTA_UP = 10
-        self.STEER_DELTA_DOWN = 10
+        self.STEER_MAX = 500
+        self.STEER_DELTA_UP = 6
+        self.STEER_DELTA_DOWN = 8
         self.STEER_DRIVER_ALLOWANCE = 250
         self.STEER_DRIVER_MULTIPLIER = 2
         self.STEER_THRESHOLD = 250
