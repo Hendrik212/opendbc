@@ -66,8 +66,9 @@ class CarController(CarControllerBase):
     elif CC.enabled:
       self.openpilot_disabled_frame = 0
 
-    # steering torque
-    new_torque = int(round(actuators.torque * self.params.STEER_MAX))
+    # steering torque - use speed-dependent limit for Ioniq 6
+    steer_max = self.params.get_steer_max(CS.out.vEgo)
+    new_torque = int(round(actuators.torque * steer_max))
     apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, self.params)
 
     # >90 degree steering fault prevention
@@ -114,7 +115,7 @@ class CarController(CarControllerBase):
                                             stopping, hud_control, actuators, CS, CC))
 
     new_actuators = actuators.as_builder()
-    new_actuators.torque = apply_torque / self.params.STEER_MAX
+    new_actuators.torque = apply_torque / steer_max
     new_actuators.torqueOutputCan = apply_torque
     new_actuators.accel = accel
 
