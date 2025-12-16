@@ -249,7 +249,8 @@ class CarState(CarStateBase):
       left_blinker_sig, right_blinker_sig = "LEFT_LAMP_ALT", "RIGHT_LAMP_ALT"
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][left_blinker_sig],
                                                                       cp.vl["BLINKERS"][right_blinker_sig])
-    if self.CP.enableBsm:
+    # BSM signals only available when ADAS ECU is active (not in openpilot longitudinal mode)
+    if self.CP.enableBsm and not self.CP.openpilotLongitudinalControl:
       # Some cars use different signal names for blind spot indicators
       if self.CP.carFingerprint in (CAR.HYUNDAI_IONIQ_6,):
         ret.leftBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["LEFT_MB"] != 0
@@ -312,7 +313,8 @@ class CarState(CarStateBase):
         # this message is 50Hz but the ECU frequently stops transmitting for ~0.5s
         ("CRUISE_BUTTONS", 1)
       ]
-    if CP.enableBsm:
+    # BSM message comes from ADAS ECU, which is disabled during openpilot longitudinal control
+    if CP.enableBsm and not CP.openpilotLongitudinalControl:
       msgs += [
         ("BLINDSPOTS_REAR_CORNERS", 20),
       ]
