@@ -152,10 +152,11 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
 
   // Calculate interpolation factor (0.0 = low speed, 1.0 = high speed)
   float speed_factor = 0.0f;
-  if (vehicle_speed > SPEED_THRESHOLD_MS) {
+  float current_speed = vehicle_speed.values[0];  // Extract speed from sample_t struct
+  if (current_speed > SPEED_THRESHOLD_MS) {
     speed_factor = 1.0f;  // Above threshold, use stock limits
-  } else if (vehicle_speed > 0.0f) {
-    speed_factor = vehicle_speed / SPEED_THRESHOLD_MS;  // Linear interpolation
+  } else if (current_speed > 0.0f) {
+    speed_factor = current_speed / SPEED_THRESHOLD_MS;  // Linear interpolation
   }
 
   // Low speed limits (0 km/h) - aggressive for parking/sharp turns
