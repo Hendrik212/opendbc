@@ -138,42 +138,13 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *msg) {
   }
 }
 
-// Helper function for smooth interpolation between two values
-static int interpolate_int(int low_speed_val, int high_speed_val, float speed_factor) {
-  return (int)(low_speed_val + (high_speed_val - low_speed_val) * speed_factor);
-}
-
 static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
-  // Speed-dependent torque limits for Ioniq 6
-  // Smoothly interpolate between aggressive (low speed) and stock (high speed) limits
-  // Transition range: 0 km/h (0 m/s) to 70 km/h (19.44 m/s)
-
-  const float SPEED_THRESHOLD_MS = 19.44f;  // 70 km/h in m/s
-
-  // Calculate interpolation factor (0.0 = low speed, 1.0 = high speed)
-  float speed_factor = 0.0f;
-  if (vehicle_speed > SPEED_THRESHOLD_MS) {
-    speed_factor = 1.0f;  // Above threshold, use stock limits
-  } else if (vehicle_speed > 0.0f) {
-    speed_factor = vehicle_speed / SPEED_THRESHOLD_MS;  // Linear interpolation
-  }
-
-  // Low speed limits (0 km/h) - aggressive for parking/sharp turns
-  const int LOW_SPEED_MAX_TORQUE = 720;
-  const int LOW_SPEED_RATE_UP = 6;
-  const int LOW_SPEED_RATE_DOWN = 8;
-
-  // High speed limits (70+ km/h) - conservative stock values
-  const int HIGH_SPEED_MAX_TORQUE = 270;
-  const int HIGH_SPEED_RATE_UP = 2;
-  const int HIGH_SPEED_RATE_DOWN = 3;
-
-  // Interpolate limits based on current speed
+  // Ioniq 6 tuned limits - moderate values to prevent wobble and rate limit violations
   const TorqueSteeringLimits HYUNDAI_CANFD_STEERING_LIMITS = {
-    .max_torque = interpolate_int(LOW_SPEED_MAX_TORQUE, HIGH_SPEED_MAX_TORQUE, speed_factor),
-    .max_rt_delta = 112,  // Keep constant
-    .max_rate_up = interpolate_int(LOW_SPEED_RATE_UP, HIGH_SPEED_RATE_UP, speed_factor),
-    .max_rate_down = interpolate_int(LOW_SPEED_RATE_DOWN, HIGH_SPEED_RATE_DOWN, speed_factor),
+    .max_torque = 500,
+    .max_rt_delta = 112,
+    .max_rate_up = 6,
+    .max_rate_down = 8,
     .driver_torque_allowance = 250,
     .driver_torque_multiplier = 2,
     .type = TorqueDriverLimited,

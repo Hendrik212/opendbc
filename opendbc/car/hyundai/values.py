@@ -16,7 +16,6 @@ class CarControllerParams:
   ACCEL_MAX = 2.0 # m/s
 
   def __init__(self, CP):
-    self.CP = CP
     self.STEER_DELTA_UP = 3
     self.STEER_DELTA_DOWN = 7
     self.STEER_DRIVER_ALLOWANCE = 50
@@ -25,16 +24,10 @@ class CarControllerParams:
     self.STEER_THRESHOLD = 150
     self.STEER_STEP = 1  # 100 Hz
 
-    # For speed-dependent limits
-    self._is_ioniq6_canfd = (CP.flags & HyundaiFlags.CANFD) and (CP.carFingerprint == CAR.HYUNDAI_IONIQ_6)
-
     if CP.flags & HyundaiFlags.CANFD:
-      # Ioniq 6 has speed-dependent dynamic limits (matches panda safety interpolation)
+      # Ioniq 6 has improved steering with moderate limits to prevent wobble
       if CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
-        self.STEER_MAX_LOW_SPEED = 720  # Max torque at 0 km/h
-        self.STEER_MAX_HIGH_SPEED = 270  # Max torque at 70+ km/h
-        self.SPEED_THRESHOLD_MS = 19.44  # 70 km/h in m/s
-        self.STEER_MAX = self.STEER_MAX_LOW_SPEED  # Default to low speed max
+        self.STEER_MAX = 500
         self.STEER_DELTA_UP = 6
         self.STEER_DELTA_DOWN = 8
         self.STEER_DRIVER_ALLOWANCE = 250
@@ -69,32 +62,6 @@ class CarControllerParams:
     # Default for most HKG
     else:
       self.STEER_MAX = 384
-
-  def get_steer_max(self, v_ego: float) -> int:
-    """
-    Get speed-dependent steering torque limit for Ioniq 6.
-    Smoothly interpolates between low speed (720) and high speed (270) limits.
-    Matches the panda safety interpolation exactly.
-
-    Args:
-      v_ego: Vehicle speed in m/s
-
-    Returns:
-      Maximum steering torque for current speed
-    """
-    if not self._is_ioniq6_canfd:
-      return self.STEER_MAX
-
-    # Calculate interpolation factor (0.0 = low speed, 1.0 = high speed)
-    if v_ego >= self.SPEED_THRESHOLD_MS:
-      speed_factor = 1.0
-    elif v_ego > 0.0:
-      speed_factor = v_ego / self.SPEED_THRESHOLD_MS
-    else:
-      speed_factor = 0.0
-
-    # Linear interpolation between low and high speed limits
-    return int(self.STEER_MAX_LOW_SPEED + (self.STEER_MAX_HIGH_SPEED - self.STEER_MAX_LOW_SPEED) * speed_factor)
 
 
 class HyundaiSafetyFlags(IntFlag):
@@ -389,7 +356,7 @@ class CAR(Platforms):
   HYUNDAI_IONIQ_6 = HyundaiCanFDPlatformConfig(
     [HyundaiCarDocs("Hyundai Ioniq 6 (with HDA II) 2023-24", "Highway Driving Assist II", car_parts=CarParts.common([CarHarness.hyundai_p]))],
     HYUNDAI_IONIQ_5.specs,
-    flags=HyundaiFlags.EV | HyundaiFlags.ISLA_SILENCE | HyundaiFlags.CANFD_LKA_STEERING,
+    flags=HyundaiFlags.EV | HyundaiFlags.ISLA_SILENCE,
   )
   HYUNDAI_TUCSON_4TH_GEN = HyundaiCanFDPlatformConfig(
     [
