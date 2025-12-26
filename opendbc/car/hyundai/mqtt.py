@@ -12,10 +12,10 @@ MQTT Data Extraction for Hyundai Ioniq 6
     - Example: 0x104F (4175) * 0.1 = 417.5V
     - Verified range: 417.5V - 417.6V during AC charging
 
-  * Bytes 8-9: Charging current (16-bit little-endian signed, 0.2A resolution)
+  * Bytes 8-9: Charging current (16-bit little-endian signed, 0.4A resolution)
     - Negative values in CAN indicate charging current
-    - Example: 0xFFE8 (-24) * -0.2 = 4.8A charging
-    - Verified range: 4.4A - 5.0A during 2kW AC charging session
+    - Example: 0xFFE8 (-24) * -0.4 = 9.6A charging
+    - Corrected resolution to match actual charging power measurements
 
   * Bytes 24-25: Charging time remaining (16-bit little-endian, minutes)
     - Example: 0x0582 (1410) = 1410 minutes = 23.5 hours
@@ -85,22 +85,22 @@ def getParsedMessages(msgs, bus, dat):
                     voltage_raw = data[4] | (data[5] << 8)
                     pack_voltage_out = voltage_raw * 0.1
 
-                    # Bytes 8-9: Charging current (16-bit little-endian signed, 0.2A resolution)
+                    # Bytes 8-9: Charging current (16-bit little-endian signed, 0.4A resolution)
                     # Negative values in CAN = charging current, convert to positive
-                    # Example: 0xFFE8 (-24) * -0.2 = 4.8A
+                    # Example: 0xFFE8 (-24) * -0.4 = 9.6A
                     current_raw = data[8] | (data[9] << 8)
                     # Convert to signed 16-bit
                     if current_raw > 32767:
                         current_raw -= 65536
-                    charging_current_out = current_raw * -0.2
+                    charging_current_out = current_raw * -0.4
 
                     # Bytes 24-25: Charging time remaining (16-bit little-endian, direct minutes)
                     # Example: 0x0582 (1410) = 1410 minutes
                     charging_time_remaining_out = data[24] | (data[25] << 8)
 
-                    # Calculate charging power (voltage * current)
+                    # Calculate charging power (voltage * current), convert W to kW
                     if pack_voltage_out > 0 and charging_current_out > 0:
-                        charging_power_out = pack_voltage_out * charging_current_out
+                        charging_power_out = (pack_voltage_out * charging_current_out) / 1000.0
                     else:
                         charging_power_out = -1.0
 
