@@ -21,15 +21,14 @@ MQTT Data Extraction for Hyundai Ioniq 6
     - Example: 0x0582 (1410) = 1410 minutes = 23.5 hours
     - Verified progression: 1410 -> 1400 -> 1380 -> 1350 -> 1320 -> 1270 minutes (decreasing as expected)
 
-- 0x2b5 (693, Bus 1): Estimated Range and Charging Status
+- 0x2b5 (693, Bus 1): Estimated Range
   * Bytes 8-9: Range in kilometers (16-bit little-endian, direct value)
     - Verified progression during charging: 129 -> 130 -> 131 -> 132 -> 136 -> 142 -> 144 -> 160 km
     - Monotonically increasing (never drops) - cleanest signal
     - Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
 
-  * Byte 4 bit 0: Charging status flag
-    - Bit = 1: Charging handshake/idle
-    - Bit = 0: Charging active
+Note: Charging status is now derived from charging power (voltage * current).
+      If charging_power_out > 0, status is "active", otherwise "idle".
 """
 
 import cereal.messaging as messaging
@@ -104,18 +103,17 @@ def getParsedMessages(msgs, bus, dat):
                     else:
                         charging_power_out = -1.0
 
-            # Message 0x2b5 (693): Estimated Range and Charging Status (Bus 1)
+                    # Determine charging status based on charging power
+                    # If power > 0, the car is actively charging
+                    charging_status_out = "active" if charging_power_out > 0 else "idle"
+
+            # Message 0x2b5 (693): Estimated Range (Bus 1)
             if address == 0x2b5 and msg_bus == 1:
                 if len(data) >= 10:
                     # Bytes 8-9: Range in kilometers (16-bit little-endian, direct value)
                     # Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
                     range_km = data[8] | (data[9] << 8)
                     range_out = range_km
-
-                    # Byte 4 bit 0: Charging status flag
-                    # Bit = 1: Charging handshake/idle, Bit = 0: Charging active
-                    charging_flag = data[4] & 0x01
-                    charging_status_out = "idle" if charging_flag == 1 else "active"
 
             # Store raw data for debugging
             dat[address] = data
