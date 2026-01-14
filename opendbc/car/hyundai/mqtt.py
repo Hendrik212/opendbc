@@ -21,11 +21,16 @@ MQTT Data Extraction for Hyundai Ioniq 6
     - Example: 0x0582 (1410) = 1410 minutes = 23.5 hours
     - Verified progression: 1410 -> 1400 -> 1380 -> 1350 -> 1320 -> 1270 minutes (decreasing as expected)
 
-- 0x2b5 (693, Bus 1): Estimated Range
+- 0x2b5 (693, Bus 1): Estimated Range and Connector Status
   * Bytes 8-9: Range in kilometers (16-bit little-endian, direct value)
     - Verified progression during charging: 129 -> 130 -> 131 -> 132 -> 136 -> 142 -> 144 -> 160 km
     - Monotonically increasing (never drops) - cleanest signal
     - Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
+
+  * Byte 12: Charging connector status
+    - 0x62 (98) = Connector plugged in
+    - 0x00 (0) = Connector not connected
+    - Verified independent of charging port door status
 
 Note: Charging status is now derived from charging power (voltage * current).
       If charging_power_out > 0, status is "active", otherwise "idle".
@@ -35,7 +40,7 @@ import cereal.messaging as messaging
 import time
 
 # Debug flag: Enable raw message publishing for connector bit detection
-DEBUG_RAW_MESSAGES = True
+DEBUG_RAW_MESSAGES = False
 
 # Output metrics - initialized to sentinel values
 soc_out = -1.0
@@ -45,6 +50,7 @@ charging_current_out = -1.0
 charging_power_out = -1.0
 charging_time_remaining_out = -1
 charging_status_out = "unknown"
+connector_connected_out = False
 
 # Raw message tracking for debug publishing
 _prev_0x2fa = None
@@ -77,6 +83,7 @@ def getParsedMessages(msgs, bus, dat, pm=None):
     """
     global soc_out, range_out, pack_voltage_out, charging_current_out
     global charging_power_out, charging_time_remaining_out, charging_status_out
+    global connector_connected_out
     global _prev_0x2fa, _prev_0x2b5, _last_debug_publish_time
 
     # Track current messages for debug publishing
@@ -131,7 +138,7 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     # If power > 0, the car is actively charging
                     charging_status_out = "active" if charging_power_out > 0 else "idle"
 
-            # Message 0x2b5 (693): Estimated Range (Bus 1)
+            # Message 0x2b5 (693): Estimated Range and Connector Status (Bus 1)
             if address == 0x2b5 and msg_bus == 1:
                 # Track raw message for debug publishing
                 current_0x2b5 = bytes(data)
@@ -141,6 +148,11 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     # Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
                     range_km = data[8] | (data[9] << 8)
                     range_out = range_km
+
+                if len(data) >= 13:
+                    # Byte 12: Charging connector status
+                    # 0x62 (98) = Connector plugged in, 0x00 = Connector not connected
+                    connector_connected_out = (data[12] == 0x62)
 
             # Store raw data for debugging
             dat[address] = data
