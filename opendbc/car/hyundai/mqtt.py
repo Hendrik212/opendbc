@@ -56,7 +56,7 @@ connector_connected_out = False
 _prev_0x2fa = None
 _prev_0x2b5 = None
 _last_debug_publish_time = 0
-_DEBUG_PUBLISH_INTERVAL = 1.0  # seconds
+_DEBUG_PUBLISH_INTERVAL = 10.0  # seconds
 
 # CAN bus configuration
 sendcan = messaging.pub_sock('sendcan')
