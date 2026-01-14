@@ -27,7 +27,7 @@ MQTT Data Extraction for Hyundai Ioniq 6
     - Monotonically increasing (never drops) - cleanest signal
     - Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
 
-  * Byte 12: Charging connector status
+  * Byte 16: Charging connector status
     - 0x62 (98) = Connector plugged in
     - 0x00 (0) = Connector not connected
     - Verified independent of charging port door status
@@ -149,10 +149,10 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     range_km = data[8] | (data[9] << 8)
                     range_out = range_km
 
-                if len(data) >= 13:
-                    # Byte 12: Charging connector status
+                if len(data) >= 17:
+                    # Byte 16: Charging connector status
                     # 0x62 (98) = Connector plugged in, 0x00 = Connector not connected
-                    connector_connected_out = (data[12] == 0x62)
+                    connector_connected_out = (data[16] == 0x62)
 
             # Store raw data for debugging
             dat[address] = data
