@@ -17,20 +17,20 @@ MQTT Data Extraction for Hyundai Ioniq 6
     - Example: 0xFFE8 (-24) * -0.4 = 9.6A charging
     - Corrected resolution to match actual charging power measurements
 
-  * Bytes 24-25: Charging time remaining (16-bit little-endian, minutes)
+  * Bytes 22-23: Charging time remaining (16-bit little-endian, minutes)
     - Example: 0x0582 (1410) = 1410 minutes = 23.5 hours
     - Verified progression: 1410 -> 1400 -> 1380 -> 1350 -> 1320 -> 1270 minutes (decreasing as expected)
 
-- 0x2b5 (693, Bus 1): Estimated Range and Connector Status
+  * Bytes 24-25: Charging connector status (16-bit little-endian)
+    - Non-zero (e.g., 0x026C = 620) = Connector plugged in
+    - 0x0000 (0) = Connector not connected
+    - Reliable regardless of charging port door state or car sleep/wake state
+
+- 0x2b5 (693, Bus 1): Estimated Range
   * Bytes 8-9: Range in kilometers (16-bit little-endian, direct value)
     - Verified progression during charging: 129 -> 130 -> 131 -> 132 -> 136 -> 142 -> 144 -> 160 km
     - Monotonically increasing (never drops) - cleanest signal
     - Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
-
-  * Byte 16: Charging connector status
-    - 0x62 (98) = Connector plugged in
-    - 0x00 (0) = Connector not connected
-    - Verified independent of charging port door status
 
 Note: Charging status is now derived from charging power (voltage * current).
       If charging_power_out > 0, status is "active", otherwise "idle".
@@ -124,9 +124,14 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                         current_raw -= 65536
                     charging_current_out = current_raw * -0.4
 
-                    # Bytes 24-25: Charging time remaining (16-bit little-endian, direct minutes)
+                    # Bytes 22-23: Charging time remaining (16-bit little-endian, direct minutes)
                     # Example: 0x0582 (1410) = 1410 minutes
-                    charging_time_remaining_out = data[24] | (data[25] << 8)
+                    charging_time_remaining_out = data[22] | (data[23] << 8)
+
+                    # Bytes 24-25: Charging connector status (16-bit little-endian)
+                    # Non-zero = connector plugged in, 0 = not connected
+                    connector_raw = data[24] | (data[25] << 8)
+                    connector_connected_out = (connector_raw > 0)
 
                     # Calculate charging power (voltage * current), convert W to kW
                     if pack_voltage_out > 0 and charging_current_out > 0:
@@ -138,7 +143,7 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     # If power > 0, the car is actively charging
                     charging_status_out = "active" if charging_power_out > 0 else "idle"
 
-            # Message 0x2b5 (693): Estimated Range and Connector Status (Bus 1)
+            # Message 0x2b5 (693): Estimated Range (Bus 1)
             if address == 0x2b5 and msg_bus == 1:
                 # Track raw message for debug publishing
                 current_0x2b5 = bytes(data)
@@ -148,11 +153,6 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     # Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
                     range_km = data[8] | (data[9] << 8)
                     range_out = range_km
-
-                if len(data) >= 17:
-                    # Byte 16: Charging connector status
-                    # 0x62 (98) = Connector plugged in, 0x00 = Connector not connected
-                    connector_connected_out = (data[16] == 0x62)
 
             # Store raw data for debugging
             dat[address] = data
