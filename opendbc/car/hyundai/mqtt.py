@@ -40,7 +40,7 @@ import cereal.messaging as messaging
 import time
 
 # Debug flag: Enable raw message publishing for connector bit detection
-DEBUG_RAW_MESSAGES = False
+DEBUG_RAW_MESSAGES = True
 
 # Output metrics - initialized to sentinel values
 soc_out = -1.0
