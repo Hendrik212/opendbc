@@ -32,6 +32,10 @@ Note: Charging status is now derived from charging power (voltage * current).
 """
 
 import cereal.messaging as messaging
+import time
+
+# Debug flag: Enable raw message publishing for connector bit detection
+DEBUG_RAW_MESSAGES = True
 
 # Output metrics - initialized to sentinel values
 soc_out = -1.0
@@ -42,11 +46,22 @@ charging_power_out = -1.0
 charging_time_remaining_out = -1
 charging_status_out = "unknown"
 
+# Raw message tracking for debug publishing
+_prev_0x2fa = None
+_prev_0x2b5 = None
+_last_debug_publish_time = 0
+_DEBUG_PUBLISH_INTERVAL = 1.0  # seconds
+
 # CAN bus configuration
 sendcan = messaging.pub_sock('sendcan')
 
 
-def getParsedMessages(msgs, bus, dat):
+def _bytes_to_hex(data):
+    """Convert byte array to hex string (e.g., [72, 16, 79] -> '48104F')"""
+    return ''.join(f'{b:02X}' for b in data)
+
+
+def getParsedMessages(msgs, bus, dat, pm=None):
     """
     Main parser function called by status.py to extract CAN data.
 
@@ -58,9 +73,15 @@ def getParsedMessages(msgs, bus, dat):
         msgs: List of CAN messages from cereal
         bus: CAN bus number (ignored - we check all buses)
         dat: Dictionary to store parsed data
+        pm: Optional PubMaster for MQTT publishing (required for debug mode)
     """
     global soc_out, range_out, pack_voltage_out, charging_current_out
     global charging_power_out, charging_time_remaining_out, charging_status_out
+    global _prev_0x2fa, _prev_0x2b5, _last_debug_publish_time
+
+    # Track current messages for debug publishing
+    current_0x2fa = None
+    current_0x2b5 = None
 
     for msg in msgs:
         if msg.which() != 'can':
@@ -73,6 +94,9 @@ def getParsedMessages(msgs, bus, dat):
 
             # Message 0x2fa (762): Battery SOC and Charging Metrics (Bus 1)
             if address == 0x2fa and msg_bus == 1:
+                # Track raw message for debug publishing
+                current_0x2fa = bytes(data)
+
                 if len(data) >= 26:
                     # Byte 15: Battery SOC (divide by 2 for percentage, 0.5% resolution)
                     # Example: 48 / 2 = 24.0%, 61 / 2 = 30.5%
@@ -109,6 +133,9 @@ def getParsedMessages(msgs, bus, dat):
 
             # Message 0x2b5 (693): Estimated Range (Bus 1)
             if address == 0x2b5 and msg_bus == 1:
+                # Track raw message for debug publishing
+                current_0x2b5 = bytes(data)
+
                 if len(data) >= 10:
                     # Bytes 8-9: Range in kilometers (16-bit little-endian, direct value)
                     # Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
@@ -117,4 +144,31 @@ def getParsedMessages(msgs, bus, dat):
 
             # Store raw data for debugging
             dat[address] = data
+
+    # Debug mode: Publish raw messages when they change (rate-limited)
+    if DEBUG_RAW_MESSAGES and pm is not None:
+        current_time = time.time()
+
+        # Check if either message changed
+        msg_changed = False
+        if current_0x2fa is not None and current_0x2fa != _prev_0x2fa:
+            msg_changed = True
+            _prev_0x2fa = current_0x2fa
+        if current_0x2b5 is not None and current_0x2b5 != _prev_0x2b5:
+            msg_changed = True
+            _prev_0x2b5 = current_0x2b5
+
+        # Publish if changed and rate limit allows
+        if msg_changed and (current_time - _last_debug_publish_time) >= _DEBUG_PUBLISH_INTERVAL:
+            from openpilot.system.mqttd import mqttd
+
+            debug_data = {}
+            if _prev_0x2fa is not None:
+                debug_data["0x2fa"] = _bytes_to_hex(_prev_0x2fa)
+            if _prev_0x2b5 is not None:
+                debug_data["0x2b5"] = _bytes_to_hex(_prev_0x2b5)
+            debug_data["timestamp"] = int(current_time)
+
+            mqttd.publish(pm, "openpilot/car_debug/raw_messages", debug_data)
+            _last_debug_publish_time = current_time
 
