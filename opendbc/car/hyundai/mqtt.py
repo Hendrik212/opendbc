@@ -21,16 +21,17 @@ MQTT Data Extraction for Hyundai Ioniq 6
     - Example: 0x0582 (1410) = 1410 minutes = 23.5 hours
     - Verified progression: 1410 -> 1400 -> 1380 -> 1350 -> 1320 -> 1270 minutes (decreasing as expected)
 
-- 0x2b5 (693, Bus 1): Estimated Range and Connector Status
+- 0x2b5 (693, Bus 1): Estimated Range
   * Bytes 8-9: Range in kilometers (16-bit little-endian, direct value)
     - Verified progression during charging: 129 -> 130 -> 131 -> 132 -> 136 -> 142 -> 144 -> 160 km
     - Monotonically increasing (never drops) - cleanest signal
     - Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
 
-  * Byte 16: Charging connector status (unreliable when car asleep or port closed)
-    - 0x62 (98) = Connector plugged in
-    - 0x00 (0) = Connector not connected
-    - Note: Only reliable when car is awake and charging port is open
+- 0x035 (53, Bus 1): Connector Status
+  * Byte 16, bit 2: Charging connector plugged status
+    - 0x06 (bit 2 set) = Connector plugged in
+    - 0x02 (bit 2 clear) = Connector not connected
+    - Verified across 3 plug/unplug cycles - reliable indicator
 
 Note: Charging status is now derived from charging power (voltage * current).
       If charging_power_out > 0, status is "active", otherwise "idle".
@@ -90,7 +91,8 @@ def getParsedMessages(msgs, bus, dat, pm=None):
 
     Hyundai Ioniq 6 verified metrics:
     - 0x2fa (762): SOC, pack voltage, charging current, charging time remaining
-    - 0x2b5 (693): Range, charging status flag
+    - 0x2b5 (693): Range
+    - 0x035 (53): Connector plugged status
 
     Args:
         msgs: List of CAN messages from cereal
@@ -171,7 +173,7 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     # If power > 0, the car is actively charging
                     charging_status_out = "active" if charging_power_out > 0 else "idle"
 
-            # Message 0x2b5 (693): Estimated Range and Connector Status (Bus 1)
+            # Message 0x2b5 (693): Estimated Range (Bus 1)
             if address == 0x2b5 and msg_bus == 1:
                 # Track raw message for debug publishing
                 current_0x2b5 = bytes(data)
@@ -182,11 +184,13 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     range_km = data[8] | (data[9] << 8)
                     range_out = range_km
 
+            # Message 0x035 (53): Connector Status (Bus 1)
+            if address == 0x035 and msg_bus == 1:
                 if len(data) >= 17:
-                    # Byte 16: Charging connector status
-                    # Note: Unreliable when car asleep or port closed
-                    # 0x62 (98) = Connector plugged in, 0x00 = Connector not connected
-                    connector_connected_out = (data[16] == 0x62)
+                    # Byte 16, bit 2: Connector plugged status
+                    # 0x06 (bit 2 set) = Plugged, 0x02 (bit 2 clear) = Unplugged
+                    # Verified across 3 plug/unplug cycles
+                    connector_connected_out = (data[16] & 0x04) != 0
 
             # Store raw data for debugging
             dat[address] = data
