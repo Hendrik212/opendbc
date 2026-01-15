@@ -42,6 +42,9 @@ import time
 # Debug flag: Enable raw message publishing for connector bit detection
 DEBUG_RAW_MESSAGES = True
 
+# Discovery mode: Scan Bus 1 for all active message IDs
+DISCOVERY_MODE = True
+
 # Output metrics - initialized to sentinel values
 soc_out = -1.0
 range_out = -1
@@ -57,6 +60,11 @@ _prev_0x2fa = None
 _prev_0x2b5 = None
 _last_debug_publish_time = 0
 _DEBUG_PUBLISH_INTERVAL = 10.0  # seconds
+
+# Discovery mode tracking
+_discovered_messages = {}  # {address: {"count": int, "first_seen": float}}
+_last_discovery_publish_time = 0
+_DISCOVERY_PUBLISH_INTERVAL = 30.0  # seconds
 
 # CAN bus configuration
 sendcan = messaging.pub_sock('sendcan')
@@ -85,6 +93,7 @@ def getParsedMessages(msgs, bus, dat, pm=None):
     global charging_power_out, charging_time_remaining_out, charging_status_out
     global connector_connected_out
     global _prev_0x2fa, _prev_0x2b5, _last_debug_publish_time
+    global _discovered_messages, _last_discovery_publish_time
 
     # Track current messages for debug publishing
     current_0x2fa = None
@@ -98,6 +107,16 @@ def getParsedMessages(msgs, bus, dat, pm=None):
             address = can_msg.address
             data = can_msg.dat
             msg_bus = can_msg.src
+
+            # Discovery mode: Track all Bus 1 message IDs
+            if DISCOVERY_MODE and msg_bus == 1:
+                current_time = time.time()
+                if address not in _discovered_messages:
+                    _discovered_messages[address] = {
+                        "count": 0,
+                        "first_seen": current_time
+                    }
+                _discovered_messages[address]["count"] += 1
 
             # Message 0x2fa (762): Battery SOC and Charging Metrics (Bus 1)
             if address == 0x2fa and msg_bus == 1:
@@ -184,4 +203,32 @@ def getParsedMessages(msgs, bus, dat, pm=None):
 
             mqttd.publish(pm, "openpilot/car_debug/raw_messages", debug_data)
             _last_debug_publish_time = current_time
+
+    # Discovery mode: Publish discovered message IDs periodically
+    if DISCOVERY_MODE and pm is not None:
+        current_time = time.time()
+        if (current_time - _last_discovery_publish_time) >= _DISCOVERY_PUBLISH_INTERVAL:
+            from openpilot.system.mqttd import mqttd
+
+            # Format discovered IDs as hex strings and sort by ID
+            discovered_ids = sorted([f"0x{addr:03x}" for addr in _discovered_messages.keys()])
+
+            # Build stats dictionary with hex IDs
+            stats = {}
+            for addr, data in _discovered_messages.items():
+                hex_id = f"0x{addr:03x}"
+                stats[hex_id] = {
+                    "count": data["count"],
+                    "first_seen": int(data["first_seen"])
+                }
+
+            discovery_data = {
+                "bus": 1,
+                "discovered_ids": discovered_ids,
+                "stats": stats,
+                "timestamp": int(current_time)
+            }
+
+            mqttd.publish(pm, "openpilot/car_debug/message_discovery", discovery_data)
+            _last_discovery_publish_time = current_time
 
