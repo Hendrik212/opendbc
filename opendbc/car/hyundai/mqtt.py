@@ -45,6 +45,9 @@ DEBUG_RAW_MESSAGES = True
 # Discovery mode: Scan Bus 1 for all active message IDs
 DISCOVERY_MODE = True
 
+# Message scanner mode: Capture full content of all discovered messages
+MESSAGE_SCANNER_MODE = True
+
 # Output metrics - initialized to sentinel values
 soc_out = -1.0
 range_out = -1
@@ -65,6 +68,12 @@ _DEBUG_PUBLISH_INTERVAL = 10.0  # seconds
 _discovered_messages = {}  # {address: {"count": int, "first_seen": float}}
 _last_discovery_publish_time = 0
 _DISCOVERY_PUBLISH_INTERVAL = 30.0  # seconds
+
+# Message scanner tracking
+_message_scanner_content = {}  # {address: bytes}
+_prev_scanner_content = {}  # {address: bytes} - previous published state
+_last_scanner_publish_time = 0
+_SCANNER_PUBLISH_INTERVAL = 10.0  # seconds
 
 # CAN bus configuration
 sendcan = messaging.pub_sock('sendcan')
@@ -94,6 +103,7 @@ def getParsedMessages(msgs, bus, dat, pm=None):
     global connector_connected_out
     global _prev_0x2fa, _prev_0x2b5, _last_debug_publish_time
     global _discovered_messages, _last_discovery_publish_time
+    global _message_scanner_content, _prev_scanner_content, _last_scanner_publish_time
 
     # Track current messages for debug publishing
     current_0x2fa = None
@@ -117,6 +127,10 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                         "first_seen": current_time
                     }
                 _discovered_messages[address]["count"] += 1
+
+            # Message scanner mode: Capture full content of all Bus 1 messages
+            if MESSAGE_SCANNER_MODE and msg_bus == 1:
+                _message_scanner_content[address] = bytes(data)
 
             # Message 0x2fa (762): Battery SOC and Charging Metrics (Bus 1)
             if address == 0x2fa and msg_bus == 1:
@@ -231,4 +245,34 @@ def getParsedMessages(msgs, bus, dat, pm=None):
 
             mqttd.publish(pm, "openpilot/car_debug/message_discovery", discovery_data)
             _last_discovery_publish_time = current_time
+
+    # Message scanner mode: Publish all message contents when changed (rate-limited)
+    if MESSAGE_SCANNER_MODE and pm is not None:
+        current_time = time.time()
+
+        # Check if any message content changed
+        content_changed = False
+        for addr, content in _message_scanner_content.items():
+            if addr not in _prev_scanner_content or _prev_scanner_content[addr] != content:
+                content_changed = True
+                break
+
+        # Publish if changed and rate limit allows
+        if content_changed and (current_time - _last_scanner_publish_time) >= _SCANNER_PUBLISH_INTERVAL:
+            from openpilot.system.mqttd import mqttd
+
+            # Build messages dictionary with hex strings
+            messages = {}
+            for addr, content in _message_scanner_content.items():
+                hex_id = f"0x{addr:03x}"
+                messages[hex_id] = _bytes_to_hex(content)
+
+            scanner_data = {
+                "messages": messages,
+                "timestamp": int(current_time)
+            }
+
+            mqttd.publish(pm, "openpilot/car_debug/message_scanner", scanner_data)
+            _prev_scanner_content = _message_scanner_content.copy()
+            _last_scanner_publish_time = current_time
 
