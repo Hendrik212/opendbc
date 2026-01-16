@@ -84,14 +84,19 @@ UDS_TESTER_PRESENT = 0x3E
 # Wake CAN bus addresses for Hyundai CAN FD
 # Try multiple ECU addresses to wake various systems
 WAKE_ADDRESSES = [
-    0x7d0,  # ADAS ECU
-    0x7b1,  # Body ECU
+    0x7df,  # OBD2 functional broadcast - reaches ALL ECUs
     0x7e4,  # BMS (Battery Management System) - common Hyundai address
     0x7e2,  # OBD/Powertrain ECU
+    0x7d0,  # ADAS ECU
+    0x7b1,  # Body ECU
     0x7c4,  # Instrument cluster
 ]
 # Try both buses - ECAN (0) and ACAN (1) for CAN FD
 WAKE_BUSES = [0, 1]
+
+# UDS Services to try
+UDS_READ_DATA_BY_ID = 0x22  # Read Data By Identifier
+UDS_DIAGNOSTIC_SESSION = 0x10  # Diagnostic Session Control
 
 
 def wakeCanBus():
@@ -118,17 +123,27 @@ def wakeCanBus():
 
         for bus in WAKE_BUSES:
             for addr in WAKE_ADDRESSES:
-                # Build UDS Tester Present message (service 0x3E with suppress response)
-                # Format: [length, service_type, sub_function, padding...]
-                dat = bytes([0x02, UDS_TESTER_PRESENT, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00])
+                # Try multiple UDS services to maximize wake chance
 
-                # Send multiple times to ensure wake
-                for _ in range(50):
-                    panda.can_send(addr, dat, bus)
+                # 1. Diagnostic Session Control - Default Session (0x01)
+                # This often wakes ECUs that are in sleep mode
+                dat_session = bytes([0x02, UDS_DIAGNOSTIC_SESSION, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00])
+                for _ in range(20):
+                    panda.can_send(addr, dat_session, bus)
+
+                # 2. Tester Present with suppress response
+                dat_tester = bytes([0x02, UDS_TESTER_PRESENT, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00])
+                for _ in range(20):
+                    panda.can_send(addr, dat_tester, bus)
+
+                # 3. Read Data By ID - try reading SOC (common PID F45B for Hyundai EVs)
+                dat_read = bytes([0x03, UDS_READ_DATA_BY_ID, 0xF4, 0x5B, 0x00, 0x00, 0x00, 0x00])
+                for _ in range(10):
+                    panda.can_send(addr, dat_read, bus)
 
                 with open("/tmp/wake_debug.log", "a") as f:
-                    f.write(f"Sent 50 messages to 0x{addr:03x} on bus {bus}\n")
-                print(f"[MQTT] Sent 50 wake messages to 0x{addr:03x} on bus {bus}", flush=True)
+                    f.write(f"Sent wake sequence to 0x{addr:03x} on bus {bus}\n")
+                print(f"[MQTT] Sent wake sequence to 0x{addr:03x} on bus {bus}", flush=True)
 
         return True
     except Exception as e:
