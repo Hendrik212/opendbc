@@ -34,9 +34,9 @@ MQTT Data Extraction for Hyundai Ioniq 6
     - Verified across 3 plug/unplug cycles - reliable indicator
 
 - 0x1f5 (501, Bus 1): Charge Limits
-  * Byte 22: AC charge limit (value / 2 = percentage)
+  * Byte 26: AC charge limit (value / 2 = percentage)
     - Example: 0x78 (120) / 2 = 60%
-  * Byte 23: DC charge limit (value / 2 = percentage)
+  * Byte 27: DC charge limit (value / 2 = percentage)
     - Example: 0x64 (100) / 2 = 50%
     - Verified by changing limits in app and observing CAN changes
 
@@ -282,14 +282,14 @@ def getParsedMessages(msgs, bus, dat, pm=None):
 
             # Message 0x1f5 (501): Charge Limits (Bus 1)
             if address == 0x1f5 and msg_bus == 1:
-                if len(data) >= 24:
-                    # Byte 22: AC charge limit (value / 2 = percentage)
+                if len(data) >= 28:
+                    # Byte 26: AC charge limit (value / 2 = percentage)
                     # Example: 0x78 (120) / 2 = 60%
-                    charge_limit_ac_out = data[22] // 2
+                    charge_limit_ac_out = data[26] // 2
 
-                    # Byte 23: DC charge limit (value / 2 = percentage)
+                    # Byte 27: DC charge limit (value / 2 = percentage)
                     # Example: 0x64 (100) / 2 = 50%
-                    charge_limit_dc_out = data[23] // 2
+                    charge_limit_dc_out = data[27] // 2
 
             # Store raw data for debugging
             dat[address] = data
