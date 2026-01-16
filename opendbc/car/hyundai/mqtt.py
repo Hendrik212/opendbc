@@ -121,29 +121,34 @@ def wakeCanBus():
             f.write("Safety mode set to ALLOUTPUT\n")
         print("[MQTT] Panda connected, safety mode set to ALLOUTPUT", flush=True)
 
-        for bus in WAKE_BUSES:
-            for addr in WAKE_ADDRESSES:
-                # Try multiple UDS services to maximize wake chance
+        # Send wake messages for 5 seconds to keep bus awake
+        import time as wake_time
+        wake_start = wake_time.monotonic()
+        wake_duration = 5.0  # seconds
+        cycle_count = 0
 
-                # 1. Diagnostic Session Control - Default Session (0x01)
-                # This often wakes ECUs that are in sleep mode
+        with open("/tmp/wake_debug.log", "a") as f:
+            f.write(f"Starting sustained wake for {wake_duration} seconds\n")
+
+        while wake_time.monotonic() - wake_start < wake_duration:
+            for bus in WAKE_BUSES:
+                # Focus on OBD2 broadcast which should reach all ECUs
+                addr = 0x7df
+
+                # Diagnostic Session Control - Default Session
                 dat_session = bytes([0x02, UDS_DIAGNOSTIC_SESSION, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00])
-                for _ in range(20):
-                    panda.can_send(addr, dat_session, bus)
+                panda.can_send(addr, dat_session, bus)
 
-                # 2. Tester Present with suppress response
+                # Tester Present
                 dat_tester = bytes([0x02, UDS_TESTER_PRESENT, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00])
-                for _ in range(20):
-                    panda.can_send(addr, dat_tester, bus)
+                panda.can_send(addr, dat_tester, bus)
 
-                # 3. Read Data By ID - try reading SOC (common PID F45B for Hyundai EVs)
-                dat_read = bytes([0x03, UDS_READ_DATA_BY_ID, 0xF4, 0x5B, 0x00, 0x00, 0x00, 0x00])
-                for _ in range(10):
-                    panda.can_send(addr, dat_read, bus)
+            cycle_count += 1
+            wake_time.sleep(0.05)  # 50ms between cycles = 20Hz
 
-                with open("/tmp/wake_debug.log", "a") as f:
-                    f.write(f"Sent wake sequence to 0x{addr:03x} on bus {bus}\n")
-                print(f"[MQTT] Sent wake sequence to 0x{addr:03x} on bus {bus}", flush=True)
+        with open("/tmp/wake_debug.log", "a") as f:
+            f.write(f"Sent {cycle_count} wake cycles over {wake_duration}s\n")
+        print(f"[MQTT] Sent {cycle_count} wake cycles over {wake_duration}s", flush=True)
 
         return True
     except Exception as e:
