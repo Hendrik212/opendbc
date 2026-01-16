@@ -95,10 +95,17 @@ def wakeCanBus():
 
     Returns True if messages were sent successfully, False otherwise.
     """
+    import traceback
     try:
+        with open("/tmp/wake_debug.log", "a") as f:
+            f.write("wakeCanBus called\n")
         print("[MQTT] Connecting to Panda for wake...", flush=True)
         panda = Panda()
+        with open("/tmp/wake_debug.log", "a") as f:
+            f.write("Panda connected\n")
         panda.set_safety_mode(Panda.SAFETY_ALLOUTPUT)
+        with open("/tmp/wake_debug.log", "a") as f:
+            f.write("Safety mode set to ALLOUTPUT\n")
         print("[MQTT] Panda connected, safety mode set to ALLOUTPUT", flush=True)
 
         for addr in WAKE_ADDRESSES:
@@ -110,10 +117,15 @@ def wakeCanBus():
             for _ in range(100):
                 panda.can_send(addr, dat, WAKE_BUS)
 
+            with open("/tmp/wake_debug.log", "a") as f:
+                f.write(f"Sent 100 messages to 0x{addr:03x}\n")
             print(f"[MQTT] Sent 100 wake messages to 0x{addr:03x} on bus {WAKE_BUS}", flush=True)
 
         return True
     except Exception as e:
+        with open("/tmp/wake_debug.log", "a") as f:
+            f.write(f"EXCEPTION: {e}\n")
+            f.write(traceback.format_exc())
         print(f"[MQTT] Wake CAN bus failed: {e}", flush=True)
         return False
 
