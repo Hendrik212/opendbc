@@ -82,9 +82,16 @@ _SCANNER_PUBLISH_INTERVAL = 10.0  # seconds
 UDS_TESTER_PRESENT = 0x3E
 
 # Wake CAN bus addresses for Hyundai CAN FD
-# 0x7d0 is the standard diagnostic address used by Hyundai ADAS ECUs
-WAKE_ADDRESSES = [0x7d0, 0x7b1]  # ADAS and body ECU addresses
-WAKE_BUS = 1  # ECAN bus for CAN FD
+# Try multiple ECU addresses to wake various systems
+WAKE_ADDRESSES = [
+    0x7d0,  # ADAS ECU
+    0x7b1,  # Body ECU
+    0x7e4,  # BMS (Battery Management System) - common Hyundai address
+    0x7e2,  # OBD/Powertrain ECU
+    0x7c4,  # Instrument cluster
+]
+# Try both buses - ECAN (0) and ACAN (1) for CAN FD
+WAKE_BUSES = [0, 1]
 
 
 def wakeCanBus():
@@ -92,7 +99,7 @@ def wakeCanBus():
     Send UDS Tester Present messages to wake the CAN bus.
 
     Uses Panda with SAFETY_ALLOUTPUT to bypass normal safety restrictions.
-    Sends to address 0x7d0 (ADAS ECU) and 0x7b1 (body ECU) on bus 1 (ECAN).
+    Sends to multiple ECU addresses on both ECAN (bus 0) and ACAN (bus 1).
 
     Returns True if messages were sent successfully, False otherwise.
     """
@@ -109,18 +116,19 @@ def wakeCanBus():
             f.write("Safety mode set to ALLOUTPUT\n")
         print("[MQTT] Panda connected, safety mode set to ALLOUTPUT", flush=True)
 
-        for addr in WAKE_ADDRESSES:
-            # Build UDS Tester Present message (service 0x3E with suppress response)
-            # Format: [length, service_type, sub_function, padding...]
-            dat = bytes([0x02, UDS_TESTER_PRESENT, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00])
+        for bus in WAKE_BUSES:
+            for addr in WAKE_ADDRESSES:
+                # Build UDS Tester Present message (service 0x3E with suppress response)
+                # Format: [length, service_type, sub_function, padding...]
+                dat = bytes([0x02, UDS_TESTER_PRESENT, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00])
 
-            # Send multiple times to ensure wake
-            for _ in range(100):
-                panda.can_send(addr, dat, WAKE_BUS)
+                # Send multiple times to ensure wake
+                for _ in range(50):
+                    panda.can_send(addr, dat, bus)
 
-            with open("/tmp/wake_debug.log", "a") as f:
-                f.write(f"Sent 100 messages to 0x{addr:03x}\n")
-            print(f"[MQTT] Sent 100 wake messages to 0x{addr:03x} on bus {WAKE_BUS}", flush=True)
+                with open("/tmp/wake_debug.log", "a") as f:
+                    f.write(f"Sent 50 messages to 0x{addr:03x} on bus {bus}\n")
+                print(f"[MQTT] Sent 50 wake messages to 0x{addr:03x} on bus {bus}", flush=True)
 
         return True
     except Exception as e:
