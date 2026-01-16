@@ -33,6 +33,13 @@ MQTT Data Extraction for Hyundai Ioniq 6
     - 0x02 (bit 2 clear) = Connector not connected
     - Verified across 3 plug/unplug cycles - reliable indicator
 
+- 0x1f5 (501, Bus 1): Charge Limits
+  * Byte 22: AC charge limit (value / 2 = percentage)
+    - Example: 0x78 (120) / 2 = 60%
+  * Byte 23: DC charge limit (value / 2 = percentage)
+    - Example: 0x64 (100) / 2 = 50%
+    - Verified by changing limits in app and observing CAN changes
+
 Note: Charging status is now derived from charging power (voltage * current).
       If charging_power_out > 0, status is "active", otherwise "idle".
 """
@@ -60,6 +67,8 @@ charging_power_out = -1.0
 charging_time_remaining_out = -1
 charging_status_out = "unknown"
 connector_connected_out = False
+charge_limit_ac_out = -1  # AC charge limit percentage
+charge_limit_dc_out = -1  # DC charge limit percentage
 
 # Raw message tracking for debug publishing
 _prev_0x2fa = None
@@ -181,7 +190,7 @@ def getParsedMessages(msgs, bus, dat, pm=None):
     """
     global soc_out, range_out, pack_voltage_out, charging_current_out
     global charging_power_out, charging_time_remaining_out, charging_status_out
-    global connector_connected_out
+    global connector_connected_out, charge_limit_ac_out, charge_limit_dc_out
     global _prev_0x2fa, _prev_0x2b5, _last_debug_publish_time
     global _discovered_messages, _last_discovery_publish_time
     global _message_scanner_content, _prev_scanner_content, _last_scanner_publish_time
@@ -270,6 +279,17 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     # 0x06 (bit 2 set) = Plugged, 0x02 (bit 2 clear) = Unplugged
                     # Verified across 3 plug/unplug cycles
                     connector_connected_out = (data[16] & 0x04) != 0
+
+            # Message 0x1f5 (501): Charge Limits (Bus 1)
+            if address == 0x1f5 and msg_bus == 1:
+                if len(data) >= 24:
+                    # Byte 22: AC charge limit (value / 2 = percentage)
+                    # Example: 0x78 (120) / 2 = 60%
+                    charge_limit_ac_out = data[22] // 2
+
+                    # Byte 23: DC charge limit (value / 2 = percentage)
+                    # Example: 0x64 (100) / 2 = 50%
+                    charge_limit_dc_out = data[23] // 2
 
             # Store raw data for debugging
             dat[address] = data
