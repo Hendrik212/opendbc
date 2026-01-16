@@ -39,6 +39,7 @@ Note: Charging status is now derived from charging power (voltage * current).
 
 import cereal.messaging as messaging
 import time
+from openpilot.selfdrive.pandad import can_list_to_can_capnp
 
 # Debug flag: Enable raw message publishing for connector bit detection
 DEBUG_RAW_MESSAGES = True
@@ -78,6 +79,46 @@ _SCANNER_PUBLISH_INTERVAL = 10.0  # seconds
 
 # CAN bus configuration
 sendcan = messaging.pub_sock('sendcan')
+
+# UDS Tester Present service type
+UDS_TESTER_PRESENT = 0x3E
+
+# Wake CAN bus addresses for Hyundai CAN FD
+# 0x7d0 is the standard diagnostic address used by Hyundai ADAS ECUs
+WAKE_ADDRESSES = [0x7d0, 0x7b1]  # ADAS and body ECU addresses
+WAKE_BUS = 1  # ECAN bus for CAN FD
+
+
+def wakeCanBus():
+    """
+    Send UDS Tester Present messages to wake the CAN bus.
+
+    Uses address 0x7d0 (ADAS ECU) and 0x7b1 (body ECU) on bus 1 (ECAN).
+    This is the same technique used by openpilot's carcontroller to keep ECUs awake.
+
+    Returns True if messages were sent successfully, False otherwise.
+    """
+    global sendcan
+
+    try:
+        print("[MQTT] Sending wake messages to CAN bus", flush=True)
+
+        for addr in WAKE_ADDRESSES:
+            # Build UDS Tester Present message (service 0x3E with suppress response)
+            # Format: [length, service_type, sub_function, padding...]
+            dat = bytes([0x02, UDS_TESTER_PRESENT, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00])
+
+            # Send multiple times to ensure wake
+            for _ in range(10):
+                msg = [(addr, dat, WAKE_BUS)]
+                sendcan.send(can_list_to_can_capnp(msg, msgtype='sendcan'))
+
+            print(f"[MQTT] Sent wake message to 0x{addr:03x} on bus {WAKE_BUS}", flush=True)
+
+        return True
+    except Exception as e:
+        print(f"[MQTT] Wake CAN bus failed: {e}", flush=True)
+        return False
 
 
 def _bytes_to_hex(data):
