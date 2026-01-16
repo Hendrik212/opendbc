@@ -39,7 +39,7 @@ Note: Charging status is now derived from charging power (voltage * current).
 
 import cereal.messaging as messaging
 import time
-from openpilot.selfdrive.pandad import can_list_to_can_capnp
+from panda import Panda
 
 # Debug flag: Enable raw message publishing for connector bit detection
 DEBUG_RAW_MESSAGES = True
@@ -77,9 +77,6 @@ _prev_scanner_content = {}  # {address: bytes} - previous published state
 _last_scanner_publish_time = 0
 _SCANNER_PUBLISH_INTERVAL = 10.0  # seconds
 
-# CAN bus configuration
-sendcan = messaging.pub_sock('sendcan')
-
 # UDS Tester Present service type
 UDS_TESTER_PRESENT = 0x3E
 
@@ -93,15 +90,16 @@ def wakeCanBus():
     """
     Send UDS Tester Present messages to wake the CAN bus.
 
-    Uses address 0x7d0 (ADAS ECU) and 0x7b1 (body ECU) on bus 1 (ECAN).
-    This is the same technique used by openpilot's carcontroller to keep ECUs awake.
+    Uses Panda with SAFETY_ALLOUTPUT to bypass normal safety restrictions.
+    Sends to address 0x7d0 (ADAS ECU) and 0x7b1 (body ECU) on bus 1 (ECAN).
 
     Returns True if messages were sent successfully, False otherwise.
     """
-    global sendcan
-
     try:
-        print("[MQTT] Sending wake messages to CAN bus", flush=True)
+        print("[MQTT] Connecting to Panda for wake...", flush=True)
+        panda = Panda()
+        panda.set_safety_mode(Panda.SAFETY_ALLOUTPUT)
+        print("[MQTT] Panda connected, safety mode set to ALLOUTPUT", flush=True)
 
         for addr in WAKE_ADDRESSES:
             # Build UDS Tester Present message (service 0x3E with suppress response)
@@ -109,11 +107,10 @@ def wakeCanBus():
             dat = bytes([0x02, UDS_TESTER_PRESENT, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00])
 
             # Send multiple times to ensure wake
-            for _ in range(10):
-                msg = [(addr, dat, WAKE_BUS)]
-                sendcan.send(can_list_to_can_capnp(msg, msgtype='sendcan'))
+            for _ in range(100):
+                panda.can_send(addr, dat, WAKE_BUS)
 
-            print(f"[MQTT] Sent wake message to 0x{addr:03x} on bus {WAKE_BUS}", flush=True)
+            print(f"[MQTT] Sent 100 wake messages to 0x{addr:03x} on bus {WAKE_BUS}", flush=True)
 
         return True
     except Exception as e:
