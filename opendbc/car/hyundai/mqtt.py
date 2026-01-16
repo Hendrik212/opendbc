@@ -40,6 +40,7 @@ Note: Charging status is now derived from charging power (voltage * current).
 import cereal.messaging as messaging
 import time
 from panda import Panda
+from opendbc.car.structs import CarParams
 
 # Debug flag: Enable raw message publishing for connector bit detection
 DEBUG_RAW_MESSAGES = True
@@ -103,7 +104,7 @@ def wakeCanBus():
         panda = Panda()
         with open("/tmp/wake_debug.log", "a") as f:
             f.write("Panda connected\n")
-        panda.set_safety_mode(Panda.SAFETY_ALLOUTPUT)
+        panda.set_safety_mode(CarParams.SafetyModel.allOutput)
         with open("/tmp/wake_debug.log", "a") as f:
             f.write("Safety mode set to ALLOUTPUT\n")
         print("[MQTT] Panda connected, safety mode set to ALLOUTPUT", flush=True)
