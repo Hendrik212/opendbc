@@ -216,7 +216,7 @@ class CarController(CarControllerBase):
         elif CC.enabled and CS.out.standstill:
           # Use CANCEL button (push in) to resume without adjusting setpoint
           for _ in range(20):
-            can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.CANCEL))
+            can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.RES_ACCEL))
           self.last_button_frame = self.frame
 
     # ISLA silencing - send modified FR_CMR_02_100ms at dynamic rate
