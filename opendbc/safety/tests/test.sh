@@ -11,12 +11,15 @@ rm -f ./libsafety/*.gcda
 scons -j$(nproc) -D
 
 # run safety tests and generate coverage data
-pytest -n8 --ignore-glob=misra/*
+python -m unittest discover -s . -p 'test_*.py' -t ../../../
 
+# NOTE: we accept that these tools will have slight differences,
+# and in return, we get to use the stock toolchain instead of
+# installing LLVM on all users' machines
 if [ "$(uname)" = "Darwin" ]; then
-  GCOV_EXEC="/opt/homebrew/opt/llvm@18/bin/llvm-cov gcov"
+  GCOV_EXEC="llvm-cov gcov"
 else
-  GCOV_EXEC="llvm-cov-18 gcov"
+  GCOV_EXEC="gcov"
 fi
 
 # generate and open report
