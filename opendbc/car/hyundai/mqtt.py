@@ -12,10 +12,10 @@ MQTT Data Extraction for Hyundai Ioniq 6
     - Example: 0x104F (4175) * 0.1 = 417.5V
     - Verified range: 417.5V - 417.6V during AC charging
 
-  * Bytes 8-9: Charging current (16-bit little-endian signed, 0.4A resolution)
+  * Bytes 8-9: Charging current (16-bit little-endian signed, 0.275A resolution)
     - Negative values in CAN indicate charging current
-    - Example: 0xFFE8 (-24) * -0.4 = 9.6A charging
-    - Corrected resolution to match actual charging power measurements
+    - Example: 0xFFE0 (-32) * -0.275 = 8.8A charging
+    - Recalibrated: raw=-32, V=292.1V → 2.57kW matches observed 2.56kW AC charging
 
   * Bytes 24-25: Charging time remaining (16-bit little-endian, minutes)
     - Example: 0x0582 (1410) = 1410 minutes = 23.5 hours
@@ -238,14 +238,14 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     voltage_raw = data[4] | (data[5] << 8)
                     pack_voltage_out = voltage_raw * 0.1
 
-                    # Bytes 8-9: Charging current (16-bit little-endian signed, 0.4A resolution)
+                    # Bytes 8-9: Charging current (16-bit little-endian signed, 0.275A resolution)
                     # Negative values in CAN = charging current, convert to positive
-                    # Example: 0xFFE8 (-24) * -0.4 = 9.6A
+                    # Example: 0xFFE0 (-32) * -0.275 = 8.8A
                     current_raw = data[8] | (data[9] << 8)
                     # Convert to signed 16-bit
                     if current_raw > 32767:
                         current_raw -= 65536
-                    charging_current_out = current_raw * -0.4
+                    charging_current_out = current_raw * -0.275
 
                     # Bytes 24-25: Charging time remaining (16-bit little-endian, direct minutes)
                     # Example: 0x0582 (1410) = 1410 minutes
