@@ -238,7 +238,18 @@ class CarInterface(CarInterfaceBase):
       addr, bus = 0x7d0, CanBus(CP).ECAN if CP.flags & HyundaiFlags.CANFD else 0
       if CP.flags & HyundaiFlags.CANFD_LKA_STEERING.value:
         addr, bus = 0x730, CanBus(CP).ECAN
-      disable_ecu(can_recv, can_send, bus=bus, addr=addr, com_cont_req=communication_control)
+
+      # Verify ECU silence on relay-checked addresses to prevent relay malfunction
+      if CP.flags & HyundaiFlags.CANFD:
+        if CP.flags & HyundaiFlags.CANFD_LKA_STEERING.value:
+          verify_addrs = [0x1A0]
+        else:
+          verify_addrs = [0x1A0, 0x160]
+      else:
+        verify_addrs = [0x1A0]
+
+      disable_ecu(can_recv, can_send, bus=bus, addr=addr, com_cont_req=communication_control,
+                  verify_silence_addrs=verify_addrs, verify_silence_timeout=5.0)
 
     # for blinkers
     if CP.flags & HyundaiFlags.ENABLE_BLINKERS:
