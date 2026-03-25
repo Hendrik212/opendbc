@@ -264,7 +264,8 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       left_blinker_sig, right_blinker_sig = "LEFT_LAMP_ALT", "RIGHT_LAMP_ALT"
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][left_blinker_sig],
                                                                       cp.vl["BLINKERS"][right_blinker_sig])
-    if self.CP.enableBsm:
+    # BSM signals only available when ADAS ECU is active (not in openpilot longitudinal mode)
+    if self.CP.enableBsm and not self.CP.openpilotLongitudinalControl:
       ret.leftBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["FL_INDICATOR"] != 0
       ret.rightBlindspot = cp.vl["BLINDSPOTS_REAR_CORNERS"]["FR_INDICATOR"] != 0
 
@@ -324,6 +325,11 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       msgs += [
         # this message is 50Hz but the ECU frequently stops transmitting for ~0.5s
         ("CRUISE_BUTTONS", 1)
+      ]
+    # BSM message comes from ADAS ECU, which is disabled during openpilot longitudinal control
+    if CP.enableBsm and not CP.openpilotLongitudinalControl:
+      msgs += [
+        ("BLINDSPOTS_REAR_CORNERS", 20),
       ]
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], msgs, CanBus(CP).ECAN),

@@ -66,6 +66,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     self.apply_torque_last = 0
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0
+    self.openpilot_disabled_frame = 0
 
   def update(self, CC, CC_SP, CS, now_nanos):
     EsccCarController.update(self, CS)
@@ -76,6 +77,12 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
 
     actuators = CC.actuators
     hud_control = CC.hudControl
+
+    # Track when openpilot gets disabled for cancel timeout
+    if not CC.enabled and self.openpilot_disabled_frame == 0:
+      self.openpilot_disabled_frame = self.frame
+    elif CC.enabled:
+      self.openpilot_disabled_frame = 0
 
     # steering torque
     new_torque = int(round(actuators.torque * self.params.STEER_MAX))
@@ -218,8 +225,9 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     else:
       # button presses
       if (self.frame - self.last_button_frame) * DT_CTRL > 0.25:
-        # cruise cancel
-        if CC.cruiseControl.cancel:
+        # cruise cancel - keep trying for 4s when openpilot disabled but stock cruise still active
+        time_since_disabled = (self.frame - self.openpilot_disabled_frame) * DT_CTRL if self.openpilot_disabled_frame > 0 else 0
+        if (CC.cruiseControl.cancel or (not CC.enabled and CS.out.cruiseState.enabled and time_since_disabled < 4.0)):
           if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
             can_sends.append(hyundaicanfd.create_acc_cancel(self.packer, self.CP, self.CAN, CS.cruise_info))
             self.last_button_frame = self.frame
@@ -229,13 +237,9 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
             self.last_button_frame = self.frame
 
         # cruise standstill resume
-        elif CC.cruiseControl.resume:
-          if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
-            # TODO: resume for alt button cars
-            pass
-          else:
-            for _ in range(20):
-              can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.RES_ACCEL))
-            self.last_button_frame = self.frame
+        elif CC.enabled and CS.out.standstill:
+          for _ in range(20):
+            can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.RES_ACCEL))
+          self.last_button_frame = self.frame
 
     return can_sends
