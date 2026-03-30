@@ -1,3 +1,5 @@
+import time
+
 from opendbc.car import Bus, get_safety_config, structs, uds
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, \
@@ -6,6 +8,7 @@ from opendbc.car.hyundai.values import HyundaiFlags, CAR, DBC, \
 from opendbc.car.hyundai.radar_interface import MANDO_RADAR_ADDR, MRREVO14F_RADAR_ADDR, MRR35_RADAR_ADDR, MRR30_RADAR_ADDR
 from opendbc.car.interfaces import CarInterfaceBase
 from opendbc.car.disable_ecu import disable_ecu
+from opendbc.car.isotp_parallel_query import IsoTpParallelQuery
 from opendbc.car.hyundai.carcontroller import CarController
 from opendbc.car.hyundai.carstate import CarState
 from opendbc.car.hyundai.radar_interface import RadarInterface
@@ -256,8 +259,23 @@ class CarInterface(CarInterfaceBase):
       else:
         verify_addrs = [0x1A0]
 
-      disable_ecu(can_recv, can_send, bus=bus, addr=addr, com_cont_req=communication_control,
-                  verify_silence_addrs=verify_addrs, verify_silence_timeout=5.0)
+      disabled = disable_ecu(can_recv, can_send, bus=bus, addr=addr, com_cont_req=communication_control,
+                             verify_silence_addrs=verify_addrs, verify_silence_timeout=5.0)
+
+      # Ioniq 6: ADAS ECU at 0x730 ignores UDS commands when the car is started directly into
+      # full ready state. A soft reset (0x11 0x03) forces the ECU to reboot, creating a brief
+      # window where it accepts the extended diagnostic session and communication control commands.
+      if not disabled and CP.carFingerprint == CAR.HYUNDAI_IONIQ_6 and CP.flags & HyundaiFlags.CANFD_LKA_STEERING.value:
+        ECU_SOFT_RESET = b'\x11\x03'
+        ECU_SOFT_RESET_RESPONSE = b'\x51\x03'
+        try:
+          query = IsoTpParallelQuery(can_send, can_recv, bus, [(addr, None)], [ECU_SOFT_RESET], [ECU_SOFT_RESET_RESPONSE])
+          query.get_data(0.5)
+        except Exception:
+          pass
+        time.sleep(2)
+        disable_ecu(can_recv, can_send, bus=bus, addr=addr, com_cont_req=communication_control,
+                    verify_silence_addrs=verify_addrs, verify_silence_timeout=5.0)
 
     # for blinkers
     if CP.flags & HyundaiFlags.ENABLE_BLINKERS:
