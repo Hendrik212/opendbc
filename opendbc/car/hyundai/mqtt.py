@@ -42,6 +42,11 @@ MQTT Data Extraction for Hyundai Ioniq 6
 
 Note: Charging status is now derived from charging power (voltage * current).
       If charging_power_out > 0, status is "active", otherwise "idle".
+
+- 0x320 (800, Bus 1): Charging Power
+  * Byte 24: Charging power (uint8, 0.1 kW / bit)
+    - Verified at 3 power levels: 25=2.5kW, 21=2.1kW, 12=1.2kW
+    - Matches Hyundai app and dashboard display exactly
 """
 
 import cereal.messaging as messaging
@@ -251,14 +256,8 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     # Example: 0x0582 (1410) = 1410 minutes
                     charging_time_remaining_out = data[24] | (data[25] << 8)
 
-                    # Calculate charging power (voltage * current), convert W to kW
-                    if pack_voltage_out > 0 and charging_current_out > 0:
-                        charging_power_out = (pack_voltage_out * charging_current_out) / 1000.0
-                    else:
-                        charging_power_out = -1.0
-
+                    # Power is now sourced from 0x320 byte 24 (see below)
                     # Determine charging status based on charging power
-                    # If power > 0, the car is actively charging
                     charging_status_out = "active" if charging_power_out > 0 else "idle"
 
             # Message 0x2b5 (693): Estimated Range (Bus 1)
@@ -290,6 +289,14 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     # Byte 27: DC charge limit (value / 2 = percentage)
                     # Example: 0x64 (100) / 2 = 50%
                     charge_limit_dc_out = data[27] // 2
+
+            # Message 0x320 (800, Bus 1): Charging Power
+            if address == 0x320 and msg_bus == 1:
+                if len(data) >= 25:
+                    # Byte 24: Charging power (0.1 kW / bit, uint8)
+                    # Verified at 3 power levels: 25=2.5kW, 21=2.1kW, 12=1.2kW
+                    charging_power_out = data[24] * 0.1
+                    charging_status_out = "active" if charging_power_out > 0 else "idle"
 
             # Store raw data for debugging
             dat[address] = data
