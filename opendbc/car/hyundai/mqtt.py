@@ -27,11 +27,12 @@ MQTT Data Extraction for Hyundai Ioniq 6
     - Monotonically increasing (never drops) - cleanest signal
     - Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
 
-- 0x035 (53, Bus 1): Connector Status
-  * Byte 16, bit 2: Charging connector plugged status
-    - 0x06 (bit 2 set) = Connector plugged in
-    - 0x02 (bit 2 clear) = Connector not connected
-    - Verified across 3 plug/unplug cycles - reliable indicator
+- 0x41c (1052, Bus 1): Connector Status
+  * Byte 0, bit 3: Charging connector plugged status
+    - 1 = Connector plugged in
+    - 0 = Connector not connected
+    - Verified across multiple plug/unplug cycles with car awake
+    - Message persists when car is idle (unlike 0x035 which disappears)
 
 - 0x1f5 (501, Bus 1): Charge Limits
   * Byte 26: AC charge limit (value / 2 = percentage)
@@ -185,7 +186,7 @@ def getParsedMessages(msgs, bus, dat, pm=None):
     Hyundai Ioniq 6 verified metrics:
     - 0x2fa (762): SOC, pack voltage, charging current, charging time remaining
     - 0x2b5 (693): Range
-    - 0x035 (53): Connector plugged status
+    - 0x41c (1052): Connector plugged status
 
     Args:
         msgs: List of CAN messages from cereal
@@ -271,13 +272,12 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     range_km = data[8] | (data[9] << 8)
                     range_out = range_km
 
-            # Message 0x035 (53): Connector Status (Bus 1)
-            if address == 0x035 and msg_bus == 1:
-                if len(data) >= 17:
-                    # Byte 16, bit 2: Connector plugged status
-                    # 0x06 (bit 2 set) = Plugged, 0x02 (bit 2 clear) = Unplugged
-                    # Verified across 3 plug/unplug cycles
-                    connector_connected_out = (data[16] & 0x04) != 0
+            # Message 0x41c (1052, Bus 1): Connector Status
+            if address == 0x41c and msg_bus == 1:
+                if len(data) >= 1:
+                    # Byte 0, bit 3: Connector plugged status
+                    # 1 = Plugged, 0 = Unplugged
+                    connector_connected_out = (data[0] & 0x08) != 0
 
             # Message 0x1f5 (501): Charge Limits (Bus 1)
             if address == 0x1f5 and msg_bus == 1:
