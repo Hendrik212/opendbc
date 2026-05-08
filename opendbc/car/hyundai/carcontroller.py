@@ -209,6 +209,10 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
       can_sends.append(hyundaicanfd.create_suppress_lfa(self.packer, self.CAN, CS.lfa_block_msg,
                                                         self.CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG_ALT))
 
+    # suppress ISLA speed limit sounds and visual warning while keeping TSR CAN signal active
+    if self.frame % 5 == 0 and CS.isla_notification_msg is not None:
+      can_sends.append(hyundaicanfd.create_suppress_isla_sounds(self.packer, self.CAN, CS.isla_notification_msg))
+
     # LFA and HDA icons
     if self.frame % 5 == 0 and (not lka_steering or lka_steering_long):
       can_sends.append(hyundaicanfd.create_lfahda_cluster(self.packer, self.CAN, CC.enabled, self.lfa_icon))

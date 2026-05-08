@@ -73,6 +73,16 @@ def create_suppress_lfa(packer, CAN, lfa_block_msg, lka_steering_alt):
   return packer.make_can_msg(suppress_msg, CAN.ACAN, values)
 
 
+def create_suppress_isla_sounds(packer, CAN, isla_msg):
+  values = {f"BYTE{i}": isla_msg[f"BYTE{i}"] for i in (3, 4, 5, 6, 7, 9, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23)}
+  values["COUNTER"] = isla_msg["COUNTER"]
+  values["ISLA_SpdChgNotify"] = 0
+  values["ISLA_SoundType"] = 0
+  values["ISLA_WrnState"] = 2
+  values["ISLA_SpdLimitAdj"] = isla_msg["ISLA_SpdLimitAdj"]
+  return packer.make_can_msg("ISLA_NOTIFICATION", CAN.CAM, values)
+
+
 def create_buttons(packer, CP, CAN, cnt, btn):
   values = {
     "COUNTER": cnt,

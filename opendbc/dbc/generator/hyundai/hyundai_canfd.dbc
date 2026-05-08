@@ -690,6 +690,31 @@ BO_ 874 BLINDSPOTS_FRONT_CORNER_2: 16 XXX
  SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
  SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
 
+BO_ 896 ISLA_NOTIFICATION: 24 CLU
+ SG_ CHECKSUM : 0|16@1+ (1,0) [0|65535] "" XXX
+ SG_ COUNTER : 16|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE3 : 24|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE4 : 32|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE5 : 40|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE6 : 48|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE7 : 56|8@1+ (1,0) [0|255] "" XXX
+ SG_ ISLA_SpdChgNotify : 64|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE9 : 72|8@1+ (1,0) [0|255] "" XXX
+ SG_ ISLA_SoundType : 80|8@1+ (1,0) [0|255] "" XXX
+ SG_ ISLA_WrnState : 88|8@1+ (1,0) [0|7] "" XXX
+ SG_ ISLA_SpdLimitAdj : 96|8@1+ (1,0) [0|255] "km/h" XXX
+ SG_ BYTE13 : 104|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE14 : 112|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE15 : 120|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE16 : 128|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE17 : 136|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE18 : 144|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE19 : 152|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE20 : 160|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE21 : 168|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE22 : 176|8@1+ (1,0) [0|255] "" XXX
+ SG_ BYTE23 : 184|8@1+ (1,0) [0|255] "" XXX
+
 BO_ 961 BLINKER_STALKS: 8 XXX
  SG_ CHECKSUM_MAYBE : 7|8@0+ (1,0) [0|255] "" XXX
  SG_ COUNTER_ALT : 15|4@0+ (1,0) [0|15] "" XXX
@@ -946,6 +971,11 @@ CM_ SG_ 736 MAX_SPEED "Display units. Restricts car from driving above this spee
 CM_ BO_ 866 "Contains signals with detailed lane line information. Used by ADAS ECU on HDA 2 vehicles to operate LFA. Used on cars that use message 272.";
 CM_ SG_ 866 LEFT_LANE_LINE "Left lane line confidence";
 CM_ SG_ 866 RIGHT_LANE_LINE "Right lane line confidence";
+CM_ BO_ 896 "ISLA notification control from cluster to audio/body ECU. Controls overspeed warning beep and speed limit change ding. Reverse-engineered from Ioniq 6 2023 (bus 2/CAM). Not present on newer models with CCNC_0x161.";
+CM_ SG_ 896 ISLA_SpdChgNotify "Speed limit change notification pulse. 0x28=brief 0.5s pulse on speed limit transitions, 0x18=3.5s pulse for overspeed re-notification ding.";
+CM_ SG_ 896 ISLA_SoundType "Sound type selector for ISLA notifications. Determines which beep/ding to play. Active for ~5s duration.";
+CM_ SG_ 896 ISLA_WrnState "ISLA overspeed warning state. Follows ISLA_SpdWrn from 0x1FA exactly (99.8% correlation). 0x01=ISLA disabled, 0x02=no warning, 0x04=overspeed active. Byte[3] bit6 also goes high during overspeed (visual display flag).";
+CM_ SG_ 896 ISLA_SpdLimitAdj "Adjacent/next speed limit value in km/h. Shows upcoming or previous speed limit, not necessarily the current one. 0/253/255=none.";
 CM_ SG_ 961 COUNTER_ALT "only increments on change";
 CM_ SG_ 1041 COUNTER_ALT "only increments on change";
 CM_ BO_ 1043 "Lamp signals do not seem universal on cars that use LKAS_ALT, but stalk signals do.";
@@ -1135,6 +1165,9 @@ VAL_ 506 ISLA_SpdwOffst 0 "No Recognition" 253 "Unlimited Speed" 254 "Reserved" 
 VAL_ 506 ISLA_SwIgnoreReq 0 "Allow All Switch Inputs (default)" 1 "-(SET) Switch Input Ignore" 2 "+(SET) Switch Input Ignore" 3 "-(SET) & +(SET) Switch Inputs Ignore";
 VAL_ 506 ISLA_SpdChgReq 0 "Default" 1 "Speed Change Request" 2 "Reserved" 3 "Reserved";
 VAL_ 506 ISLA_SpdWrn 0 "No Warning" 1 "Warning" 2 "Reserved" 3 "Reserved";
+VAL_ 896 ISLA_SpdChgNotify 0 "None" 24 "Overspeed Re-notification Ding" 40 "Speed Limit Change Pulse";
+VAL_ 896 ISLA_SoundType 0 "No Sound" 1 "Brief Tick" 9 "Overspeed Warning Beep" 16 "Speed Limit Recognition Ding" 19 "Initial Overspeed Approach" 27 "Speed Change Warning Combo 1" 28 "Speed Change Warning Combo 2" 29 "Speed Change Warning Combo 3";
+VAL_ 896 ISLA_WrnState 1 "ISLA Disabled" 2 "No Warning" 4 "Overspeed Warning Active";
 VAL_ 506 ISLA_IcyWrn 0 "No Warning" 1 "Warning" 2 "Reserved" 3 "Reserved";
 VAL_ 506 ISLA_SymFlashMod 0 "No Flasing" 1 "Flashing Sign" 2 "Flashing - Arrow Symbol" 3 "Flashing + Arrow Symbol" 4 "Flashing Auto Symbol" 5 "Reserved" 6 "Reserved" 7 "Reserved";
 VAL_ 506 ISLA_Popup 0 "No Popup" 1 "MSLA Speed will Change" 2 "MSLA Speed has Changed" 3 "CC_SCC Speed will Change" 4 "CC_SCC Speed has Changed" 5 "Reserved" 6 "Reserved" 7 "Reserved";
