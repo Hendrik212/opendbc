@@ -48,6 +48,15 @@ Note: Charging status is now derived from charging power (voltage * current).
   * Byte 24: Charging power (uint8, 0.1 kW / bit)
     - Verified at 3 power levels: 25=2.5kW, 21=2.1kW, 12=1.2kW
     - Matches Hyundai app and dashboard display exactly
+
+- 0x30a (778, Bus 1): AC Charging Power Limit
+  * Byte 28: AC power limit setting (enum)
+    - 33 = 100%, 34 = 90%, 35 = 60%
+    - Present while charging even with car off
+  * Byte 21: AC current limit (actual negotiated value with EVSE)
+    - 240 = 100%, 220 = 90%, 140 = 60% (on 2.5kW home charger)
+    - Values will differ at higher-power wallboxes (11kW, 22kW)
+    - Verified by changing limit in car app and observing CAN + power changes
 """
 
 import cereal.messaging as messaging
@@ -75,6 +84,8 @@ charging_status_out = "unknown"
 connector_connected_out = False
 charge_limit_ac_out = -1  # AC charge limit percentage
 charge_limit_dc_out = -1  # DC charge limit percentage
+ac_power_limit_pct_out = -1  # AC power limit setting (100, 90, or 60%)
+ac_current_limit_out = -1  # AC current limit raw value from BMS
 
 # Raw message tracking for debug publishing
 _prev_0x2fa = None
@@ -197,6 +208,7 @@ def getParsedMessages(msgs, bus, dat, pm=None):
     global soc_out, range_out, pack_voltage_out, charging_current_out
     global charging_power_out, charging_time_remaining_out, charging_status_out
     global connector_connected_out, charge_limit_ac_out, charge_limit_dc_out
+    global ac_power_limit_pct_out, ac_current_limit_out
     global _prev_0x2fa, _prev_0x2b5, _last_debug_publish_time
     global _discovered_messages, _last_discovery_publish_time
     global _message_scanner_content, _prev_scanner_content, _last_scanner_publish_time
@@ -297,6 +309,21 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     # Verified at 3 power levels: 25=2.5kW, 21=2.1kW, 12=1.2kW
                     charging_power_out = data[24] * 0.1
                     charging_status_out = "active" if charging_power_out > 0 else "idle"
+
+            # Message 0x30a (778, Bus 1): AC Charging Power Limit
+            if address == 0x30a and msg_bus == 1:
+                if len(data) >= 29:
+                    # Byte 28: AC power limit setting (enum: 33=100%, 34=90%, 35=60%)
+                    setting = data[28]
+                    if setting == 33:
+                        ac_power_limit_pct_out = 100
+                    elif setting == 34:
+                        ac_power_limit_pct_out = 90
+                    elif setting == 35:
+                        ac_power_limit_pct_out = 60
+
+                    # Byte 21: AC current limit (raw value from BMS/EVSE negotiation)
+                    ac_current_limit_out = data[21]
 
             # Store raw data for debugging
             dat[address] = data
