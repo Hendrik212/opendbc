@@ -59,7 +59,7 @@ Note: Charging status is now derived from charging power (voltage * current).
     - Verified by changing limit in car app and observing CAN + power changes
 """
 
-import cereal.messaging as messaging
+import openpilot.cereal.messaging as messaging
 import time
 from panda import Panda
 from opendbc.car.structs import CarParams
