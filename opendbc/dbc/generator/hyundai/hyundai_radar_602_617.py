@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
-import os
 
-if __name__ == "__main__":
-  dbc_name = os.path.basename(__file__).replace(".py", ".dbc")
-  hyundai_path = os.path.dirname(os.path.realpath(__file__))
-  with open(os.path.join(hyundai_path, dbc_name), "w", encoding='utf-8') as f:
-    f.write("""
+
+def generate():
+  parts = []
+  parts.append("""
 VERSION ""
 
 
@@ -54,20 +52,21 @@ BO_ 1537 RADAR_LEAD: 8 RADAR
  SG_ CHECKSUM : 63|4@0+ (1,0) [0|15] "" XXX
     """)
 
-    for a in range(0x602, 0x602 + 16):
-        f.write(f"""
+  for a in range(0x602, 0x602 + 16):
+    parts.append(f"""
 BO_ {a} RADAR_TRACK_{a:x}: 8 RADAR
  SG_ 1_DISTANCE : 0|10@1+ (0.25,0) [0|255.75] "" XXX
  SG_ 1_LATERAL : 10|11@1+ (0.03,-30.705) [-30.705|30.705] "" XXX
  SG_ 1_SPEED : 21|10@1+ (0.25,-128) [-128|127.75] "" XXX
  SG_ 2_DISTANCE : 31|10@1+ (0.25,0) [0|255.75] "" XXX
  SG_ 2_LATERAL : 41|11@1+ (0.03,-30.705) [-30.705|30.705] "" XXX
- SG_ 2_SPEED : 52|10@1+ (0.25,-128) [-128|127.75] "" XXX
+ SG_ 2_SPEED : 52|8@1- (0.25,0) [-32|31.75] "" XXX
+ SG_ UNKNOWN_2 : 60|2@1+ (1,0) [0|3] "" XXX
  SG_ COUNTER : 62|2@1+ (1,0) [0|3] "" XXX
     """)
 
-    for a in range(0x612, 0x612 + 6):
-        f.write(f"""
+  for a in range(0x612, 0x612 + 6):
+    parts.append(f"""
 BO_ {a} RADAR_ALT_{a:x}: 8 RADAR
  SG_ DISTANCE : 0|10@1+ (0.25,0) [0|255.75] "" XXX
  SG_ LATERAL : 10|11@1+ (0.03,-30.705) [-30.705|30.705] "" XXX
@@ -78,3 +77,5 @@ BO_ {a} RADAR_ALT_{a:x}: 8 RADAR
  SG_ COUNTER : 56|4@1+ (1,0) [0|15] "" XXX
  SG_ CHECKSUM : 63|4@0+ (1,0) [0|15] "" XXX
     """)
+
+  return {"hyundai_radar_602_617.dbc": "".join(parts)}
