@@ -11,7 +11,7 @@ from collections.abc import Callable
 
 from opendbc.car import structs
 from opendbc.car.can_definitions import CanRecvCallable, CanSendCallable
-from opendbc.car.hyundai.values import HyundaiFlags
+from opendbc.car.hyundai.values import CAR, HyundaiFlags
 from opendbc.car.subaru.values import SubaruFlags
 from opendbc.car.toyota.values import ToyotaSafetyFlags
 from opendbc.sunnypilot.car.hyundai.enable_radar_tracks import enable_radar_tracks as hyundai_enable_radar_tracks
@@ -108,6 +108,10 @@ def _initialize_custom_longitudinal_tuning(CI, CP: structs.CarParams, CP_SP: str
 def _initialize_radar(CP: structs.CarParams, CP_SP: structs.CarParamsSP, params_dict: dict[str, str]) -> None:
   if CP.brand == 'hyundai':
     radar_mode = int(params_dict.get("RadarTracks", RadarType.OFF))
+    if CP.carFingerprint == CAR.HYUNDAI_IONIQ_6:
+      # ISLA: force full radar tracking - no CAMERA_SCC/ESCC on this platform so
+      # LEAD_ONLY is a no-op, and the UI toggle can't reach FULL_RADAR yet.
+      radar_mode = RadarType.FULL_RADAR
     if radar_mode == RadarType.LEAD_ONLY:
       CP_SP.flags |= HyundaiFlagsSP.RADAR_LEAD_ONLY.value
     if radar_mode == RadarType.FULL_RADAR:
