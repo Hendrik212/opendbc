@@ -17,7 +17,7 @@ class CarControllerParams:
   ACCEL_MIN = -3.5 # m/s^2
   ACCEL_MAX = 2.0 # m/s^2
 
-  def __init__(self, CP, vEgoRaw=100.):
+  def __init__(self, CP):
     self.STEER_DELTA_UP = 3
     self.STEER_DELTA_DOWN = 7
     self.STEER_DRIVER_ALLOWANCE = 50
@@ -27,16 +27,12 @@ class CarControllerParams:
     self.STEER_STEP = 1  # 100 Hz
 
     if CP.flags & HyundaiFlags.CANFD:
-      self.STEER_MAX = 409
-      self.STEER_DRIVER_ALLOWANCE = 100
+      self.STEER_MAX = 270
+      self.STEER_DRIVER_ALLOWANCE = 250
       self.STEER_DRIVER_MULTIPLIER = 2
-      self.STEER_THRESHOLD = 100
-      if vEgoRaw < 15.0:  # below ~34 mph - more aggressive for tight turns
-        self.STEER_DELTA_UP = 10
-        self.STEER_DELTA_DOWN = 8
-      else:
-        self.STEER_DELTA_UP = 2
-        self.STEER_DELTA_DOWN = 3
+      self.STEER_THRESHOLD = 250
+      self.STEER_DELTA_UP = 2
+      self.STEER_DELTA_DOWN = 3
 
     # To determine the limit for your car, find the maximum value that the stock LKAS will request.
     # If the max stock LKAS request is <384, add your car to this list.
