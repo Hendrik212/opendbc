@@ -84,6 +84,12 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     actuators = CC.actuators
     hud_control = CC.hudControl
 
+    # CANFD steer limits are speed-scheduled (see CarControllerParams), so rebuild them
+    # each frame from the current speed. Without this the limits are frozen at whatever
+    # the constructor default produced and the schedule never takes effect.
+    if self.CP.flags & HyundaiFlags.CANFD:
+      self.params = CarControllerParams(self.CP, CS.out.vEgoRaw)
+
     # steering torque
     new_torque = int(round(actuators.torque * self.params.STEER_MAX))
     apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, self.params)

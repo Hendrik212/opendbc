@@ -2,6 +2,8 @@ import re
 from dataclasses import dataclass, field
 from enum import IntFlag
 
+import numpy as np
+
 from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, uds
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.structs import CarParams
@@ -12,12 +14,18 @@ from opendbc.sunnypilot.car.hyundai.values import HyundaiFlagsSP
 
 Ecu = CarParams.Ecu
 
+# Speed schedule for the CANFD steer limits (see CarControllerParams). The transition
+# deliberately completes at 15 m/s: torqued only learns latAccelFactor above its
+# MIN_VEL = 15 m/s, so it never observes a STEER_MAX other than the stock 270 and its
+# calibration stays untouched by the low-speed schedule.
+CANFD_STEER_SPEED_BP = [13., 15.]  # m/s
+
 
 class CarControllerParams:
   ACCEL_MIN = -3.5 # m/s^2
   ACCEL_MAX = 2.0 # m/s^2
 
-  def __init__(self, CP):
+  def __init__(self, CP, vEgoRaw=100.):
     self.STEER_DELTA_UP = 3
     self.STEER_DELTA_DOWN = 7
     self.STEER_DRIVER_ALLOWANCE = 50
@@ -27,12 +35,19 @@ class CarControllerParams:
     self.STEER_STEP = 1  # 100 Hz
 
     if CP.flags & HyundaiFlags.CANFD:
-      self.STEER_MAX = 270
       self.STEER_DRIVER_ALLOWANCE = 250
       self.STEER_DRIVER_MULTIPLIER = 2
       self.STEER_THRESHOLD = 250
-      self.STEER_DELTA_UP = 2
-      self.STEER_DELTA_DOWN = 3
+      # Low-speed steer authority. Below ~15 m/s the stock CANFD limits leave the lateral
+      # controller both ceiling-clipped and rate-starved. Measured on HYUNDAI_IONIQ_6: the
+      # controller demands full STEER_MAX for 28-50% of frames under 8 m/s, and the rate cap
+      # adds 220-360 ms of actuator lag, which in turn trips steer_limited_by_safety and
+      # freezes the PID integrator 41-69% of the time. Above 15 m/s none of this binds
+      # (0.02% ceiling hits, 5-7 ms lag), so the schedule is confined to low speed and the
+      # highway keeps the stock 270 / 2 / 3 exactly.
+      self.STEER_MAX = int(np.interp(vEgoRaw, CANFD_STEER_SPEED_BP, [409, 270]))
+      self.STEER_DELTA_UP = int(round(np.interp(vEgoRaw, CANFD_STEER_SPEED_BP, [10, 2])))
+      self.STEER_DELTA_DOWN = int(round(np.interp(vEgoRaw, CANFD_STEER_SPEED_BP, [8, 3])))
 
     # To determine the limit for your car, find the maximum value that the stock LKAS will request.
     # If the max stock LKAS request is <384, add your car to this list.
