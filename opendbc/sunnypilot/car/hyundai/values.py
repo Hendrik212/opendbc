@@ -40,3 +40,50 @@ class HyundaiFlagsSP(IntFlag):
   RADAR_LEAD_ONLY = 2 ** 12
   RADAR_FULL_RADAR = 2 ** 13
   LAT_TUNE_STARPILOT = 2 ** 14  # Ioniq 6: StarPilot lateral tune (see latcontrol_ioniq6_tune.py)
+
+
+# StarPilot Ioniq 6 lateral tune baseline. The controller owns these (see
+# latcontrol_torque_v2.py): they are NOT written into CP at fingerprint time, so a
+# live tune switch never depends on a stale CarParams blob. torqued learns the
+# unmultiplied latAccelFactor; the controller applies the 1.22 multiplier on use.
+#
+# The old fingerprint-time path also set CP.maxLateralAccel = 3.0. That field is read
+# only by the UI torque bar's display scale (torque_bar.py) and by docs/tests -- never
+# by control -- so it is deliberately left at the override.toml value now.
+IONIQ6_STARPILOT_TORQUE = {'LAT_ACCEL_FACTOR': 3.0, 'FRICTION': 0.09}
+
+# TorqueControlTune value that selects the StarPilot tune (v2). Kept next to the flag
+# so the one definition is shared.
+TORQUE_CONTROL_TUNE_STARPILOT = 2.0
+
+
+def is_starpilot_lat_tune(CP, torque_control_tune, enforce_torque_control) -> bool:
+  """Single source of truth for 'is the StarPilot lateral tune selected?'.
+
+  Both processes derive the answer from the SAME params instead of from a separate
+  stored flag, so they cannot disagree about which tune is active for longer than
+  their respective poll intervals:
+    - card (carcontroller): 10 Hz params_thread -> sets LAT_TUNE_STARPILOT on CP_SP,
+      and CarControllerParams is rebuilt per-frame from it, so the 409 ceiling and
+      rate ramp follow live.
+    - controlsd: ~1 Hz check_lateral_control_version -> rebuilds the controller.
+  Making the predicate derived rather than stored is what makes the "StarPilot
+  limits + upstream control law" hybrid unrepresentable.
+
+  enforce_torque_control must be included: initialize_lateral_control falls back to
+  LatControlTorqueV0 whenever EnforceTorqueControl is off, IGNORING TorqueControlTune.
+  Deriving the limits from the tune version alone would then hand v0's control law the
+  StarPilot 409 ceiling -- persistently, not just for a poll interval.
+  """
+  # Local import: opendbc.car.hyundai.values imports HyundaiFlagsSP from this module,
+  # so a top-level import here would be circular.
+  from opendbc.car.hyundai.values import HyundaiFlags
+
+  if not enforce_torque_control:
+    return False
+  if CP.brand != 'hyundai' or not (CP.flags & HyundaiFlags.CANFD):
+    return False
+  try:
+    return float(torque_control_tune or 0.0) == TORQUE_CONTROL_TUNE_STARPILOT
+  except (TypeError, ValueError):
+    return False

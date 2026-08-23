@@ -16,7 +16,7 @@ from opendbc.car.hyundai.values import CAR, HyundaiFlags
 from opendbc.car.subaru.values import SubaruFlags
 from opendbc.car.toyota.values import ToyotaSafetyFlags
 from opendbc.sunnypilot.car.hyundai.enable_radar_tracks import enable_radar_tracks as hyundai_enable_radar_tracks
-from opendbc.sunnypilot.car.hyundai.longitudinal.helpers import LongitudinalTuningType, LateralTuneType
+from opendbc.sunnypilot.car.hyundai.longitudinal.helpers import LongitudinalTuningType
 from opendbc.sunnypilot.car.hyundai.values import HyundaiFlagsSP, RadarType
 from opendbc.sunnypilot.car.subaru.values_ext import SubaruFlagsSP, SubaruSafetyFlagsSP
 from opendbc.sunnypilot.car.tesla.values import MadsScreenButtonType, TeslaFlagsSP, TeslaSafetyFlagsSP
@@ -85,7 +85,6 @@ def setup_interfaces(CI, CP: structs.CarParams, CP_SP: structs.CarParamsSP,
   params_dict = {k: v for param in params_list for k, v in param.items()}
 
   _initialize_custom_longitudinal_tuning(CI, CP, CP_SP, params_dict)
-  _initialize_lateral_tune(CP, CP_SP, params_dict)
   _initialize_radar(CP, CP_SP, params_dict)
   _initialize_coop_steering(CP, CP_SP, params_dict)
   _initialize_tesla_mads_screen_button(CP, CP_SP, params_dict)
@@ -108,31 +107,11 @@ def _initialize_custom_longitudinal_tuning(CI, CP: structs.CarParams, CP_SP: str
   _ = CI.get_longitudinal_tuning_sp(CP, CP_SP)
 
 
-# StarPilot Ioniq 6 lateral tune torque params. These supersede override.toml at runtime
-# when the tune is selected; the toml itself stays at the upstream values so the "off"
-# position is a genuine upstream baseline and the StarPilot constants live here, next to
-# the flag. See latcontrol_ioniq6_tune.py for the shaping and the 1.22 gain multiplier.
-IONIQ6_STARPILOT_TORQUE = {'LAT_ACCEL_FACTOR': 3.0, 'FRICTION': 0.09, 'MAX_LAT_ACCEL': 3.0}
-
-
-def _initialize_lateral_tune(CP: structs.CarParams, CP_SP: structs.CarParamsSP,
-                             params_dict: dict[str, str]) -> None:
-
-  # Hyundai CANFD Lateral Tune (Ioniq 6 StarPilot port)
-  if CP.brand == 'hyundai' and (CP.flags & HyundaiFlags.CANFD):
-    if int(params_dict.get("HyundaiCanfdLateralTune", 0)) == LateralTuneType.STARPILOT:
-      CP_SP.flags |= HyundaiFlagsSP.LAT_TUNE_STARPILOT.value
-      # configure_torque_tune already read override.toml into CP.lateralTuning.torque at
-      # fingerprint time. Overwrite the two fields it sets from the toml (MAX_LAT_ACCEL_MEASURED
-      # feeds CP.maxLateralAccel at interfaces.py:235, which only the UI torque bar reads).
-      # torqued reads the CarParams blob, not the toml, so its sanity window follows the
-      # active tune: [2.1, 3.9] here vs [1.75, 3.25] upstream. get_restore_key() includes
-      # friction+latAccelFactor, so flipping the toggle auto-invalidates cached
-      # LiveTorqueParameters -- no manual reset needed.
-      CP.lateralTuning.torque.latAccelFactor = IONIQ6_STARPILOT_TORQUE['LAT_ACCEL_FACTOR']
-      CP.lateralTuning.torque.friction = IONIQ6_STARPILOT_TORQUE['FRICTION']
-      CP.maxLateralAccel = IONIQ6_STARPILOT_TORQUE['MAX_LAT_ACCEL']
-
+# NOTE: the StarPilot Ioniq 6 lateral tune is NOT configured here. It is derived live
+# from TorqueControlTune by is_starpilot_lat_tune() -- card sets the CP_SP flag that
+# drives the CAN FD steer limits, and the controller owns its own torque baseline
+# (see latcontrol_torque_v2.py). Writing it into CP at fingerprint time is what used to
+# make the tune un-switchable without a reboot, and let CP go stale on a live switch.
 
 
 def _initialize_radar(CP: structs.CarParams, CP_SP: structs.CarParamsSP, params_dict: dict[str, str]) -> None:
