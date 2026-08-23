@@ -64,7 +64,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     LongitudinalController.__init__(self, CP, CP_SP)
     IntelligentCruiseButtonManagementInterface.__init__(self, CP, CP_SP)
     self.CAN = CanBus(CP)
-    self.params = CarControllerParams(CP)
+    self.params = CarControllerParams(CP, CP_SP=CP_SP)
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.angle_limit_counter = 0
 
@@ -88,7 +88,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     # each frame from the current speed. Without this the limits are frozen at whatever
     # the constructor default produced and the schedule never takes effect.
     if self.CP.flags & HyundaiFlags.CANFD:
-      self.params = CarControllerParams(self.CP, CS.out.vEgoRaw)
+      self.params = CarControllerParams(self.CP, CS.out.vEgoRaw, CP_SP=self.CP_SP)
 
     # steering torque
     new_torque = int(round(actuators.torque * self.params.STEER_MAX))

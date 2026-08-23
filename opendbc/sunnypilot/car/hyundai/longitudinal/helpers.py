@@ -17,6 +17,11 @@ class LongitudinalTuningType:
   PREDICTIVE = 2
 
 
+class LateralTuneType:
+  OFF = 0       # upstream sunnypilot v2 tune
+  STARPILOT = 1  # StarPilot Ioniq 6 lateral tune (see latcontrol_ioniq6_tune.py)
+
+
 def get_car_config(CP: structs.CarParams) -> CarTuningConfig:
   # Get car type flags from specific configs or determine from car flags
   car_config = CAR_SPECIFIC_CONFIGS.get(CP.carFingerprint)

@@ -142,26 +142,19 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *msg) {
 
 static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
   const TorqueSteeringLimits HYUNDAI_CANFD_STEERING_LIMITS = {
-    // More steer authority at low speed, mirroring the schedule in CarControllerParams
-    // (opendbc/car/hyundai/values.py). fudged_speed is biased ~1 m/s low, so panda always
-    // permits at least what the car layer requests and never blocks a legitimate command
-    // near the breakpoint. The highway ceiling is still enforced here at the stock 270.
+    // Union envelope for both the upstream and StarPilot CANFD tunes. The car layer
+    // (CarControllerParams) selects which and tightens inside this envelope, so panda never
+    // blocks a legitimate command from either tune. This is StarPilot's block verbatim:
+    // flat 409 ceiling, rate 10/10 sized for the low-speed branch (panda has no speed
+    // lookup for rate limits; the tighter 2/3 above 15 m/s is enforced by the car layer),
+    // and max_rt_delta = 375 to cover 10 * 25 frames over one MAX_RT_INTERVAL (250 ms).
+    // Leaving max_rt_delta too low while raising the rate is what broke the earlier
+    // attempts (a6095657, 95dc60fe): the RT check rejected every message once a slew
+    // exceeded it, resetting desired_torque_last to 0 -- the dropout-and-re-ramp "wobble".
     .max_torque = 409,
-    .dynamic_max_torque = true,
-    .max_torque_lookup = {
-      {13., 15., 15.},
-      {409, 270, 270},
-    },
-    // max_rt_delta must cover max_rate_up over one MAX_RT_INTERVAL (250 ms = 25 frames at
-    // 100 Hz), i.e. >= 10 * 25 = 250. Leaving it at 112 while raising the rate is what broke
-    // the earlier attempts at this (a6095657, 95dc60fe): the RT check rejected every message
-    // once a slew exceeded it, and a rejection resets desired_torque_last to 0, forcing the
-    // command to ramp up from zero again. That dropout-and-re-ramp cycle was the "wobble".
     .max_rt_delta = 375,
-    // Panda has no speed lookup for the rate limits, so these are sized for the low-speed
-    // branch. Above 15 m/s the tighter 2/3 is enforced by the car layer only, not here.
     .max_rate_up = 10,
-    .max_rate_down = 8,
+    .max_rate_down = 10,
     .driver_torque_allowance = 250,
     .driver_torque_multiplier = 2,
     .type = TorqueDriverLimited,

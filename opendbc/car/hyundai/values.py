@@ -14,18 +14,12 @@ from opendbc.sunnypilot.car.hyundai.values import HyundaiFlagsSP
 
 Ecu = CarParams.Ecu
 
-# Torque-ceiling schedule for the CANFD steer limits (see CarControllerParams). This one
-# MUST complete at or below 15 m/s. torqued only learns latAccelFactor above its
-# MIN_VEL = 15 m/s, and it fits carOutput.actuatorsOutput.torque (torqued.py:189), which
-# carcontroller normalizes by STEER_MAX. Changing the ceiling inside torqued's learning
-# range would make the same normalized value mean different physical torque and bias the fit.
-CANFD_STEER_MAX_SPEED_BP = [13., 15.]  # m/s
-
-# Rate-limit schedule. Free to extend well past 15 m/s: torqued fits the *applied* torque,
-# so rate limiting adds lag but no gain error, and the fit is unaffected. Extending it is
-# also where the value is - unlike the ceiling (only 2.6-6.8% of frames at 54-70 km/h), the
-# rate cap still binds hard up there: 14-33% of frames at the cap, 33-80 ms of actuator lag,
-# and 21-47% integrator freeze. Back to stock by 19.4 m/s = 70 km/h.
+# Rate-limit schedule for the StarPilot CANFD tune (see CarControllerParams). torqued fits
+# the *applied* torque, so rate limiting adds lag but no gain error, and the fit is
+# unaffected -- this is free to extend well past torqued's 15 m/s MIN_VEL. The 193-vs-194
+# A/B measured rate-limit saturation at 54-70 km/h falling 44% -> 3% of curve frames with no
+# tracking cost, so we ramp rather than StarPilot's hard step at 15 m/s. Back to 2/3 by
+# 19.4 m/s = 70 km/h.
 CANFD_STEER_RATE_SPEED_BP = [17., 19.4]  # m/s
 
 
@@ -33,7 +27,7 @@ class CarControllerParams:
   ACCEL_MIN = -3.5 # m/s^2
   ACCEL_MAX = 2.0 # m/s^2
 
-  def __init__(self, CP, vEgoRaw=100.):
+  def __init__(self, CP, vEgoRaw=100., CP_SP=None):
     self.STEER_DELTA_UP = 3
     self.STEER_DELTA_DOWN = 7
     self.STEER_DRIVER_ALLOWANCE = 50
@@ -43,23 +37,28 @@ class CarControllerParams:
     self.STEER_STEP = 1  # 100 Hz
 
     if CP.flags & HyundaiFlags.CANFD:
-      self.STEER_DRIVER_ALLOWANCE = 250
-      self.STEER_DRIVER_MULTIPLIER = 2
-      self.STEER_THRESHOLD = 250
-      # Low/mid-speed steer authority. The stock CANFD limits leave the lateral controller
-      # both ceiling-clipped and rate-starved. Measured on HYUNDAI_IONIQ_6: the controller
-      # demands full STEER_MAX for 28-50% of frames under 8 m/s, and the rate cap adds
-      # 220-360 ms of actuator lag, which in turn trips steer_limited_by_safety and freezes
-      # the PID integrator 41-69% of the time.
-      #
-      # The two limits are scheduled independently because they bind over different ranges
-      # and have different constraints (see the two *_SPEED_BP above). The ceiling stops
-      # mattering early (2.6-6.8% of frames by 54-70 km/h) and is capped at 15 m/s by
-      # torqued; the rate cap keeps binding to ~70 km/h and is free to extend there.
-      # Above 70 km/h both are back to the stock 270 / 2 / 3 exactly.
-      self.STEER_MAX = int(np.interp(vEgoRaw, CANFD_STEER_MAX_SPEED_BP, [409, 270]))
-      self.STEER_DELTA_UP = int(round(np.interp(vEgoRaw, CANFD_STEER_RATE_SPEED_BP, [10, 2])))
-      self.STEER_DELTA_DOWN = int(round(np.interp(vEgoRaw, CANFD_STEER_RATE_SPEED_BP, [8, 3])))
+      if CP_SP is not None and (CP_SP.flags & HyundaiFlagsSP.LAT_TUNE_STARPILOT):
+        # StarPilot's Ioniq 6 tune. STEER_MAX is deliberately FLAT: carcontroller normalizes
+        # actuatorsOutput.torque by STEER_MAX, so a speed-varying ceiling makes the feedforward
+        # gain speed-varying too -- that is what made the previous scheduled version cut curves
+        # below 47 km/h (see hkg-canfd-steer-limit-schedule memory). Measured plant latAccelFactor
+        # is ~3.9 at this normalization against the tune's effective 3.73 (3.0 x 1.22), i.e.
+        # essentially plant-correct. The 1.22 multiplier is applied in the controller, not here.
+        self.STEER_MAX = 409
+        self.STEER_DRIVER_ALLOWANCE = 75    # StarPilot ships 100; softened per request
+        self.STEER_DRIVER_MULTIPLIER = 2
+        self.STEER_THRESHOLD = 100
+        # StarPilot hard-steps 10/8 -> 2/3 at 15 m/s. We ramp instead (see CANFD_STEER_RATE_SPEED_BP).
+        self.STEER_DELTA_UP = int(round(np.interp(vEgoRaw, CANFD_STEER_RATE_SPEED_BP, [10, 2])))
+        self.STEER_DELTA_DOWN = int(round(np.interp(vEgoRaw, CANFD_STEER_RATE_SPEED_BP, [8, 3])))
+      else:
+        # Upstream sunnypilot CANFD limits, verbatim.
+        self.STEER_MAX = 270
+        self.STEER_DRIVER_ALLOWANCE = 250
+        self.STEER_DRIVER_MULTIPLIER = 2
+        self.STEER_THRESHOLD = 250
+        self.STEER_DELTA_UP = 2
+        self.STEER_DELTA_DOWN = 3
 
     # To determine the limit for your car, find the maximum value that the stock LKAS will request.
     # If the max stock LKAS request is <384, add your car to this list.
