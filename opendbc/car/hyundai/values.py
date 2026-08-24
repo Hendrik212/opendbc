@@ -2,25 +2,16 @@ import re
 from dataclasses import dataclass, field
 from enum import IntFlag
 
-import numpy as np
-
 from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, uds
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.structs import CarParams
 from opendbc.car.docs_definitions import CarHarness, CarDocs, CarParts, SupportType
 from opendbc.car.fw_query_definitions import FwQueryConfig, Request, p16
 
+from opendbc.sunnypilot.car.hyundai.lateral_limits import apply_lat_tune_canfd_limits
 from opendbc.sunnypilot.car.hyundai.values import HyundaiFlagsSP
 
 Ecu = CarParams.Ecu
-
-# Rate-limit schedule for the StarPilot CANFD tune (see CarControllerParams). torqued fits
-# the *applied* torque, so rate limiting adds lag but no gain error, and the fit is
-# unaffected -- this is free to extend well past torqued's 15 m/s MIN_VEL. The 193-vs-194
-# A/B measured rate-limit saturation at 54-70 km/h falling 44% -> 3% of curve frames with no
-# tracking cost, so we ramp rather than StarPilot's hard step at 15 m/s. Back to 2/3 by
-# 19.4 m/s = 70 km/h.
-CANFD_STEER_RATE_SPEED_BP = [17., 19.4]  # m/s
 
 
 class CarControllerParams:
@@ -37,21 +28,9 @@ class CarControllerParams:
     self.STEER_STEP = 1  # 100 Hz
 
     if CP.flags & HyundaiFlags.CANFD:
-      if CP_SP is not None and (CP_SP.flags & HyundaiFlagsSP.LAT_TUNE_STARPILOT):
-        # StarPilot's Ioniq 6 tune. STEER_MAX is deliberately FLAT: carcontroller normalizes
-        # actuatorsOutput.torque by STEER_MAX, so a speed-varying ceiling makes the feedforward
-        # gain speed-varying too -- that is what made the previous scheduled version cut curves
-        # below 47 km/h (see hkg-canfd-steer-limit-schedule memory). Measured plant latAccelFactor
-        # is ~3.9 at this normalization against the tune's effective 3.73 (3.0 x 1.22), i.e.
-        # essentially plant-correct. The 1.22 multiplier is applied in the controller, not here.
-        self.STEER_MAX = 409
-        self.STEER_DRIVER_ALLOWANCE = 75    # StarPilot ships 100; softened per request
-        self.STEER_DRIVER_MULTIPLIER = 2
-        self.STEER_THRESHOLD = 100
-        # StarPilot hard-steps 10/8 -> 2/3 at 15 m/s. We ramp instead (see CANFD_STEER_RATE_SPEED_BP).
-        self.STEER_DELTA_UP = int(round(np.interp(vEgoRaw, CANFD_STEER_RATE_SPEED_BP, [10, 2])))
-        self.STEER_DELTA_DOWN = int(round(np.interp(vEgoRaw, CANFD_STEER_RATE_SPEED_BP, [8, 3])))
-      else:
+      # A fork lateral tune may override the CAN FD limits (opendbc/sunnypilot/car/hyundai/
+      # lateral_limits.py). Returns False when none is selected.
+      if not apply_lat_tune_canfd_limits(self, CP_SP, vEgoRaw):
         # Upstream sunnypilot CANFD limits, verbatim.
         self.STEER_MAX = 270
         self.STEER_DRIVER_ALLOWANCE = 250
