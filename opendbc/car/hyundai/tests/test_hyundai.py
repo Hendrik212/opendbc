@@ -487,6 +487,37 @@ class TestHyundaiFingerprint(unittest.TestCase):
         assert parser.end_addr == end_addr
         assert len(parser.parser.addresses) == end_addr - RADAR_500_53F.start_addr + 1
 
+  def test_radar_full_radar_without_tracks_still_publishes(self):
+    # FULL_RADAR can be selected on a platform where no radar tracks are detected
+    # (e.g. the Ioniq 6). set_radar_mode() clears radar_off_can for FULL_RADAR
+    # unconditionally, so update() must not fall into the parser loop and return None
+    # forever -- radard would never publish radarState and controlsd would sit in a
+    # permanent commIssue, blocking engagement.
+    CP = CarInterface.get_params(CAR.HYUNDAI_IONIQ_6, gen_empty_fingerprint(), [], False, False, False)
+    assert get_detected_radar_tracks(CP) == ()
+
+    RI = RadarInterface(CP, CarParamsSP(flags=HyundaiFlagsSP.RADAR_FULL_RADAR.value))
+    assert RI.radar_parsers == ()
+    assert not RI.radar_off_can
+
+    rets = [RI.update([]) for _ in range(20)]
+    published = [r for r in rets if r is not None]
+    assert len(published) > 0, "radar interface returned None on every frame"
+    assert all(not r.radarTracksAvailable for r in published)
+
+  def test_radar_full_radar_without_tracks_still_discovers(self):
+    # The heartbeat fallback must not disable runtime discovery: a radar that starts
+    # emitting tracks later still has to be picked up.
+    CP = CarInterface.get_params(CAR.HYUNDAI_IONIQ_6, gen_empty_fingerprint(), [], False, False, False)
+    RI = RadarInterface(CP, CarParamsSP(flags=HyundaiFlagsSP.RADAR_FULL_RADAR.value))
+    assert RI.radar_parsers == ()
+
+    dat = b'\x00' * RADAR_500_53F.message_size
+    messages = [(addr, dat, 1) for addr in RADAR_500_53F.required_address_range]
+    RI.update([(0, messages)])
+    assert len(RI.radar_parsers) == 1
+    assert RI.radar_parsers[0].spec == RADAR_500_53F
+
   def test_radar_500_runtime_discovery_upgrades_to_64_tracks(self):
     CP = CarInterface.get_params(CAR.HYUNDAI_SONATA, gen_empty_fingerprint(), [], False, False, False)
     RI = RadarInterface(CP, CarParamsSP(flags=HyundaiFlagsSP.RADAR_FULL_RADAR.value))

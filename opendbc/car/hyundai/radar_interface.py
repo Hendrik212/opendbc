@@ -384,6 +384,21 @@ class RadarInterface(RadarInterfaceBase, RadarInterfaceExt):
       return rr
 
     self._discover_radar_parsers(can_strings)
+
+    if not self.radar_parsers:
+      # FULL_RADAR is selected but nothing is parseable yet: no tracks were detected for
+      # this platform and none have been discovered on the bus. set_radar_mode() clears
+      # radar_off_can for FULL_RADAR unconditionally, so without this the loop below runs
+      # over an empty tuple, radar_cycle_complete stays False and update() returns None on
+      # every frame -- radard then never publishes radarState and controlsd sits in a
+      # permanent commIssue, blocking engagement. Fall back to the base 20 Hz heartbeat so
+      # radard keeps publishing; _discover_radar_parsers above still runs, so real tracks
+      # are picked up as soon as the radar starts emitting them.
+      ret = super().update(None)
+      if ret is not None:
+        ret.radarTracksAvailable = self.radar_tracks_available
+      return ret
+
     radar_cycle_complete = False
     for radar_parser in self.radar_parsers:
       parser_key = (radar_parser.spec.name, radar_parser.bus)
