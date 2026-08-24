@@ -88,6 +88,15 @@ class CarInterface(CarInterfaceBase):
       if ret.flags & HyundaiFlags.CANFD_CAMERA_SCC:
         ret.safetyConfigs[-1].safetyParam |= HyundaiSafetyFlags.CAMERA_SCC.value
 
+      if candidate == CAR.HYUNDAI_IONIQ_6:
+        # Keep lateral active through stops: zeroing torque at standstill drops the
+        # stop-turn hold and forces a rate-limit re-ramp from zero on every pull-away.
+        # Torque steering has no standstill gate in the panda safety or the carcontroller;
+        # the MDPS tolerating held torque at 0 speed is a property of the car, not of the
+        # lateral tune, so this is NOT gated on the tune -- and it could not be, since
+        # controlsd reads it from CP, which is fixed at process start.
+        ret.steerAtStandstill = True
+
     else:
       # Shared configuration for non CAN-FD cars
       ret.alphaLongitudinalAvailable = not (ret.flags & (HyundaiFlags.LEGACY | HyundaiFlags.UNSUPPORTED_LONGITUDINAL))
