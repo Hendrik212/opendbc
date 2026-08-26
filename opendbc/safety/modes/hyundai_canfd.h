@@ -142,23 +142,16 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *msg) {
 
 static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
   const TorqueSteeringLimits HYUNDAI_CANFD_STEERING_LIMITS = {
-    // Union envelope for both the upstream and StarPilot CANFD tunes. The car layer
-    // (CarControllerParams) selects which and tightens inside this envelope, so panda never
-    // blocks a legitimate command from either tune. Rate 10/10 is sized for the low-speed
-    // branch (panda has no speed lookup for rate limits; the tighter 2/3 above 19.4 m/s is
-    // enforced by the car layer), and max_rt_delta = 375 covers 10 * 25 frames over one
-    // MAX_RT_INTERVAL (250 ms). Leaving max_rt_delta too low while raising the rate is what
-    // broke the earlier attempts (a6095657, 95dc60fe): the RT check rejected every message
-    // once a slew exceeded it, resetting desired_torque_last to 0 -- the dropout-and-re-ramp
-    // "wobble".
-    //
-    // Flat 500 rather than a speed lookup: this is only an envelope, and the car layer
-    // schedules 500 -> 409 inside it (CANFD_STEER_MAX_SPEED_BP). Keeping panda flat means
-    // it can never block a legitimate low-speed command near a breakpoint, which is the
-    // failure the fudged_speed bias existed to work around in the earlier dynamic version.
-    // The EPS accepts well beyond this: this fork ran 500 for months and 720 briefly
-    // (95dc60fe, a6095657); both were reverted for control-loop reasons, not EPS refusal.
-    .max_torque = 500,
+    // Union envelope for both the upstream (270) and StarPilot (409) CANFD tunes. The car
+    // layer (CarControllerParams) selects which and tightens inside this envelope, so panda
+    // never blocks a legitimate command from either tune. Rate 10/10 is sized for the
+    // low-speed branch (panda has no speed lookup for rate limits; the tighter 2/3 above
+    // 19.4 m/s is enforced by the car layer), and max_rt_delta = 375 covers 10 * 25 frames
+    // over one MAX_RT_INTERVAL (250 ms). Leaving max_rt_delta too low while raising the
+    // rate is what broke earlier attempts (a6095657, 95dc60fe): the RT check rejected every
+    // message once a slew exceeded it, resetting desired_torque_last to 0 -- the
+    // dropout-and-re-ramp "wobble".
+    .max_torque = 409,
     .max_rt_delta = 375,
     .max_rate_up = 10,
     .max_rate_down = 10,
