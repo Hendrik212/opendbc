@@ -39,7 +39,7 @@ class HyundaiFlagsSP(IntFlag):
   HAS_LKAS12 = 2 ** 10
   RADAR_LEAD_ONLY = 2 ** 12
   RADAR_FULL_RADAR = 2 ** 13
-  LAT_TUNE_STARPILOT = 2 ** 14  # Ioniq 6: StarPilot lateral tune (see latcontrol_ioniq6_tune.py)
+  LAT_TUNE_STARPILOT = 2 ** 14  # Ioniq 6: StarPilot lateral tune (see lateral_tunes/ioniq6_shaping.py)
 
 
 # StarPilot Ioniq 6 lateral tune baseline. The controller owns these (see
