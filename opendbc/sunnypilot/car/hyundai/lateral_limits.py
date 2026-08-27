@@ -17,18 +17,34 @@ CANFD_STEER_RATE_SPEED_BP = [17., 19.4]  # m/s
 CANFD_STEER_DELTA_UP_V = [10, 2]
 CANFD_STEER_DELTA_DOWN_V = [8, 3]
 
-# StarPilot CANFD STEER_MAX is 409 flat. carcontroller computes `torque * STEER_MAX`, so
-# this is also the plant gain: 409/3.66 = 112 CAN per m/s^2. A higher low-speed STEER_MAX
-# (500) is a 22% gain change that undoes IONIQ_6_BASE_LAT_ACCEL_FACTOR_MULT, not free
-# headroom -- route 000001a1 railed on P-gain at |dLA| << 3.66, not on the CAN ceiling.
-# Panda max_torque must match this (hyundai_canfd.h).
+# Speed-scheduled STEER_MAX. carcontroller computes `torque * STEER_MAX`, so this is also
+# the plant gain unless latAccelFactor is scaled with it (see lat_accel_factor_for_speed).
 #
-# The 1.22 multiplier is applied in the controller (see lateral_tunes/ioniq6_starpilot.py),
-# not here.
-STARPILOT_STEER_MAX = 409
+# Route 000001a4 tight corners at CAN 409: desired 2.91 vs actual 2.35; linear CAN to match
+# was p50=509 / p90=625. 600 covers the median and most of p90. Unsaturated mapping is kept
+# at the StarPilot 409/3.66 = 112 CAN per m/s^2 by scheduling latAccelFactor with STEER_MAX
+# in the controller profile.
+#
+# 0-10 km/h (2.8 m/s) stays 409: that band rails on P/LSF with small |dLA|, and a taller
+# rail is a bigger sawtooth, not more path. 600 is in by 4 m/s (14 km/h), before the
+# 22-48 km/h corners that were torque-limited, and back to 409 by 17 m/s (before the
+# 70 km/h weave and the rate ramp). Panda max_torque must match the peak (hyundai_canfd.h).
+CANFD_STEER_MAX_SPEED_BP = [2.8, 4.0, 15.0, 17.0]  # m/s
+STARPILOT_STEER_MAX_V = [409, 600, 600, 409]
+STARPILOT_STEER_MAX_REF = 409  # StarPilot / unsaturated-gain reference
+STARPILOT_STEER_MAX = 600  # panda envelope / worst case
 STARPILOT_STEER_DRIVER_ALLOWANCE = 75    # StarPilot ships 100; softened per request
 STARPILOT_STEER_DRIVER_MULTIPLIER = 2
 STARPILOT_STEER_THRESHOLD = 100
+
+
+def steer_max_for_speed(v_ego: float) -> int:
+  return int(round(np.interp(v_ego, CANFD_STEER_MAX_SPEED_BP, STARPILOT_STEER_MAX_V)))
+
+
+def lat_accel_factor_for_speed(v_ego: float, base_factor: float) -> float:
+  """Keep CAN per m/s^2 constant as STEER_MAX changes: torque*STEER_MAX / (lataccel/factor)."""
+  return base_factor * steer_max_for_speed(v_ego) / STARPILOT_STEER_MAX_REF
 
 
 def apply_lat_tune_canfd_limits(params, CP_SP, v_ego_raw: float) -> bool:
@@ -37,7 +53,7 @@ def apply_lat_tune_canfd_limits(params, CP_SP, v_ego_raw: float) -> bool:
   if CP_SP is None or not (CP_SP.flags & HyundaiFlagsSP.LAT_TUNE_STARPILOT):
     return False
 
-  params.STEER_MAX = STARPILOT_STEER_MAX
+  params.STEER_MAX = steer_max_for_speed(v_ego_raw)
   params.STEER_DRIVER_ALLOWANCE = STARPILOT_STEER_DRIVER_ALLOWANCE
   params.STEER_DRIVER_MULTIPLIER = STARPILOT_STEER_DRIVER_MULTIPLIER
   params.STEER_THRESHOLD = STARPILOT_STEER_THRESHOLD

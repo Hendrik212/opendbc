@@ -64,7 +64,7 @@ def is_starpilot_lat_tune(CP, torque_control_tune, enforce_torque_control) -> bo
   stored flag, so they cannot disagree about which tune is active for longer than
   their respective poll intervals:
     - card (carcontroller): 10 Hz params_thread -> sets LAT_TUNE_STARPILOT on CP_SP,
-      and CarControllerParams is rebuilt per-frame from it, so the 409 ceiling and
+      and CarControllerParams is rebuilt per-frame from it, so the steer ceiling and
       rate ramp follow live.
     - controlsd: ~1 Hz check_lateral_control_version -> rebuilds the controller.
   Making the predicate derived rather than stored is what makes the "StarPilot
@@ -73,7 +73,7 @@ def is_starpilot_lat_tune(CP, torque_control_tune, enforce_torque_control) -> bo
   enforce_torque_control must be included: initialize_lateral_control falls back to
   LatControlTorqueV0 whenever EnforceTorqueControl is off, IGNORING TorqueControlTune.
   Deriving the limits from the tune version alone would then hand v0's control law the
-  StarPilot 409 ceiling -- persistently, not just for a poll interval.
+  StarPilot steer envelope -- persistently, not just for a poll interval.
   """
   # Local import: opendbc.car.hyundai.values imports HyundaiFlagsSP from this module,
   # so a top-level import here would be circular.
