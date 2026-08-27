@@ -25,11 +25,21 @@ CANFD_STEER_DELTA_DOWN_V = [8, 3]
 # at the StarPilot 409/3.66 = 112 CAN per m/s^2 by scheduling latAccelFactor with STEER_MAX
 # in the controller profile.
 #
-# 0-10 km/h (2.8 m/s) stays 409: that band rails on P/LSF with small |dLA|, and a taller
-# rail is a bigger sawtooth, not more path. 600 is in by 4 m/s (14 km/h), before the
-# 22-48 km/h corners that were torque-limited, and back to 409 by 17 m/s (before the
-# 70 km/h weave and the rate ramp). Panda max_torque must match the peak (hyundai_canfd.h).
-CANFD_STEER_MAX_SPEED_BP = [2.8, 4.0, 15.0, 17.0]  # m/s
+# The low end stays 409 because that band is a P relay, not torque starvation. Measured on
+# 1a4 (engaged, hands-off): 2.8-4.0 m/s rails 58% of frames at |p|=7.33 vs |f|=0.67, and
+# 4.0-5.0 rails 32% at |p|=3.85 vs |f|=0.53 -- P is 6-11x the feedforward, so a taller rail
+# there is a bigger sawtooth, not more path. Genuine cornering demand only takes over by
+# 8-11 m/s (|f|=1.36, |dLA|=1.48). Every sustained (>=0.5 s) ceiling plateau in the route
+# sits between 5.7 and 9.6 m/s, so 600 is fully in by 6.5 m/s (23 km/h), covering the
+# 22-48 km/h corners that were torque-limited.
+#
+# The 15-17 m/s ramp-out is kept as-is for now. Note the same measurement shows only 1.7 s
+# of >=400 CAN above 11 m/s in the whole route (vs 11.7 s of sustained plateau below it),
+# so the upper half of this window is carrying the 600 gain over ~26k frames that never
+# ask for it -- a candidate for narrowing once the 600 drive is evaluated.
+#
+# Panda max_torque must match the peak (hyundai_canfd.h).
+CANFD_STEER_MAX_SPEED_BP = [5.0, 6.5, 15.0, 17.0]  # m/s
 STARPILOT_STEER_MAX_V = [409, 600, 600, 409]
 STARPILOT_STEER_MAX_REF = 409  # StarPilot / unsaturated-gain reference
 STARPILOT_STEER_MAX = 600  # panda envelope / worst case
@@ -45,6 +55,25 @@ def steer_max_for_speed(v_ego: float) -> int:
 def lat_accel_factor_for_speed(v_ego: float, base_factor: float) -> float:
   """Keep CAN per m/s^2 constant as STEER_MAX changes: torque*STEER_MAX / (lataccel/factor)."""
   return base_factor * steer_max_for_speed(v_ego) / STARPILOT_STEER_MAX_REF
+
+
+def friction_for_speed(v_ego: float, base_friction: float) -> float:
+  """Keep the friction term's CAN contribution constant as STEER_MAX changes.
+
+  Scaling latAccelFactor (above) holds the P/I/FF paths at 112 CAN per m/s^2, but it does
+  NOT cover friction: get_friction returns +/-friction*latAccelFactor in lat-accel space
+  (opendbc/car/lateral.py) and the controller divides the summed feedforward by
+  latAccelFactor on the way out, so the two cancel and friction's NORMALIZED torque is
+  exactly `friction`. Its CAN value is therefore friction*STEER_MAX, and raising the
+  ceiling alone turns a 0.09*409 = 37 CAN breakaway kick into 0.09*600 = 54 -- a 46% gain
+  change on the one term that is a square wave through every error sign change, landing in
+  the same band that already flips 1.6-1.8 times a second.
+
+  This is not a pure restoration: holding friction's CAN constant means its lat-accel-space
+  contribution shrinks inside the 600 band. That is the right invariant only because
+  409/3.66 is what was actually tuned and driven.
+  """
+  return base_friction * STARPILOT_STEER_MAX_REF / steer_max_for_speed(v_ego)
 
 
 def apply_lat_tune_canfd_limits(params, CP_SP, v_ego_raw: float) -> bool:
