@@ -21,28 +21,32 @@ CANFD_STEER_DELTA_DOWN_V = [8, 3]
 # the plant gain unless latAccelFactor is scaled with it (see lat_accel_factor_for_speed).
 #
 # Route 000001a4 tight corners at CAN 409: desired 2.91 vs actual 2.35; linear CAN to match
-# was p50=509 / p90=625. 600 covers the median and most of p90. Unsaturated mapping is kept
-# at the StarPilot 409/3.66 = 112 CAN per m/s^2 by scheduling latAccelFactor with STEER_MAX
-# in the controller profile.
+# was p50=509 / p90=625. The mid band ceiling was 600 (covering the median and most of p90)
+# and is now 650 -- raised after the Aug 31 600-drive analysis showed tight-corner torque
+# demand reaching the rail (|output|>0.95 on 2-6% of tight-corner frames, actuators.torque
+# clipped at 1.0 ~92% of those), giving more headroom for the tightest low-speed corners.
+# Unsaturated mapping is kept at the StarPilot 409/3.66 = 112 CAN per m/s^2 by scheduling
+# latAccelFactor with STEER_MAX in the controller profile.
 #
 # The low end stays 409 because that band is a P relay, not torque starvation. Measured on
 # 1a4 (engaged, hands-off): 2.8-4.0 m/s rails 58% of frames at |p|=7.33 vs |f|=0.67, and
 # 4.0-5.0 rails 32% at |p|=3.85 vs |f|=0.53 -- P is 6-11x the feedforward, so a taller rail
 # there is a bigger sawtooth, not more path. Genuine cornering demand only takes over by
 # 8-11 m/s (|f|=1.36, |dLA|=1.48). Every sustained (>=0.5 s) ceiling plateau in the route
-# sits between 5.7 and 9.6 m/s, so 600 is fully in by 6.5 m/s (23 km/h), covering the
+# sits between 5.7 and 9.6 m/s, so 650 is fully in by 6.5 m/s (23 km/h), covering the
 # 22-48 km/h corners that were torque-limited.
 #
 # The 15-17 m/s ramp-out is kept as-is for now. Note the same measurement shows only 1.7 s
 # of >=400 CAN above 11 m/s in the whole route (vs 11.7 s of sustained plateau below it),
-# so the upper half of this window is carrying the 600 gain over ~26k frames that never
-# ask for it -- a candidate for narrowing once the 600 drive is evaluated.
+# so the upper half of this window is carrying the 650 gain over ~26k frames that never
+# ask for it -- a candidate for narrowing once the 650 drive is evaluated.
 #
-# Panda max_torque must match the peak (hyundai_canfd.h).
+# The safety envelope (opendbc/safety/modes/hyundai_canfd.h .max_torque) must match the
+# peak, or safety silently clips/rejects commands at the rail.
 CANFD_STEER_MAX_SPEED_BP = [5.0, 6.5, 15.0, 17.0]  # m/s
-STARPILOT_STEER_MAX_V = [409, 600, 600, 409]
+STARPILOT_STEER_MAX_V = [409, 650, 650, 409]
 STARPILOT_STEER_MAX_REF = 409  # StarPilot / unsaturated-gain reference
-STARPILOT_STEER_MAX = 600  # panda envelope / worst case
+STARPILOT_STEER_MAX = 650  # worst-case envelope (carcontroller + safety)
 STARPILOT_STEER_DRIVER_ALLOWANCE = 75    # StarPilot ships 100; softened per request
 STARPILOT_STEER_DRIVER_MULTIPLIER = 2
 STARPILOT_STEER_THRESHOLD = 100
@@ -65,12 +69,12 @@ def friction_for_speed(v_ego: float, base_friction: float) -> float:
   (opendbc/car/lateral.py) and the controller divides the summed feedforward by
   latAccelFactor on the way out, so the two cancel and friction's NORMALIZED torque is
   exactly `friction`. Its CAN value is therefore friction*STEER_MAX, and raising the
-  ceiling alone turns a 0.09*409 = 37 CAN breakaway kick into 0.09*600 = 54 -- a 46% gain
+  ceiling alone turns a 0.09*409 = 37 CAN breakaway kick into 0.09*650 = 58.5 -- a 58% gain
   change on the one term that is a square wave through every error sign change, landing in
   the same band that already flips 1.6-1.8 times a second.
 
   This is not a pure restoration: holding friction's CAN constant means its lat-accel-space
-  contribution shrinks inside the 600 band. That is the right invariant only because
+  contribution shrinks inside the 650 band. That is the right invariant only because
   409/3.66 is what was actually tuned and driven.
   """
   return base_friction * STARPILOT_STEER_MAX_REF / steer_max_for_speed(v_ego)

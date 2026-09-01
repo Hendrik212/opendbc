@@ -142,7 +142,7 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *msg) {
 
 static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
   const TorqueSteeringLimits HYUNDAI_CANFD_STEERING_LIMITS = {
-    // Union envelope for upstream (270) and StarPilot (speed-scheduled, peak 600) CANFD
+    // Union envelope for upstream (270) and StarPilot (speed-scheduled, peak 650) CANFD
     // tunes. The car layer (CarControllerParams) selects which and tightens inside this
     // envelope, so panda never blocks a legitimate command from either tune. Rate 10/10 is
     // sized for the low-speed branch (panda has no speed lookup for rate limits; the
@@ -150,8 +150,10 @@ static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
     // covers 10 * 25 frames over one MAX_RT_INTERVAL (250 ms). Leaving max_rt_delta too
     // low while raising the rate is what broke earlier attempts (a6095657, 95dc60fe): the
     // RT check rejected every message once a slew exceeded it, resetting
-    // desired_torque_last to 0 -- the dropout-and-re-ramp "wobble".
-    .max_torque = 600,
+    // desired_torque_last to 0 -- the dropout-and-re-ramp "wobble". max_rt_delta is
+    // proportional to max_rate_up (not max_torque), so it stays 375 when only the
+    // ceiling rises.
+    .max_torque = 650,
     .max_rt_delta = 375,
     .max_rate_up = 10,
     .max_rate_down = 10,

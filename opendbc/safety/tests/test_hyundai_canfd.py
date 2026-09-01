@@ -30,7 +30,7 @@ class TestHyundaiCanfdBase(HyundaiButtonBase, common.CarSafetyTest, common.Drive
 
   MAX_RATE_UP = 10
   MAX_RATE_DOWN = 10
-  MAX_TORQUE_LOOKUP = [0], [600]
+  MAX_TORQUE_LOOKUP = [0], [650]
 
   MAX_RT_DELTA = 375
 
