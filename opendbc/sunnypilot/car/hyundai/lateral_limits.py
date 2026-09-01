@@ -28,18 +28,23 @@ CANFD_STEER_DELTA_DOWN_V = [8, 3]
 # Unsaturated mapping is kept at the StarPilot 409/3.66 = 112 CAN per m/s^2 by scheduling
 # latAccelFactor with STEER_MAX in the controller profile.
 #
-# The low end is 650 (not 409) all the way down to 0 m/s. The original 409 floor was
-# justified as "that band is a P relay, not torque starvation -- a taller rail is a bigger
-# sawtooth, not more path." Driven Sep 1 (route 000001c5), that proved wrong: sub-10 km/h
-# was severely undrivable ping-pong, and the pegged-frame analysis showed the P term wants
-# more torque than 409 CAN in real full-lock corners (|P| p90 = 34.5; ~30% of low-speed
-# pegs fall in 409-650 CAN and unstuck at 650, the rest still peg but deliver 650 CAN
-# instead of 409 CAN -- more actual steering torque toward tracking, less understeer).
-# The normalized output swings +/-1.0 either way; 650 only raises the absolute CAN at the
-# peak, it does not widen the normalized sawtooth. So 650 down low is strictly more torque
-# toward the corner in every pegged frame.
-CANFD_STEER_MAX_SPEED_BP = [0.0, 6.5, 15.0, 17.0]  # m/s
-STARPILOT_STEER_MAX_V = [650, 650, 650, 409]
+# The low end stays 409. A flat-650 low end was briefly deployed (e61b28a0, Sep 1) on the
+# argument that "normalized output swings +/-1.0 either way, so 650 only raises peak CAN,
+# not the sawtooth." That is backwards and is reverted here: the EPS sees CAN, and
+# STEER_DELTA_UP is a flat 10 CAN/frame below 17 m/s (CANFD_STEER_RATE_SPEED_BP), so a
+# taller rail LENGTHENS every rail-to-rail traversal -- lower flip frequency, larger wheel
+# excursion per half-cycle. Route 000001c5's own analysis found the sub-23 km/h problem is
+# P-relay pegging plus the angle-assist handoff, explicitly "not torque starvation", which
+# argues against a taller creep rail rather than for one.
+#
+# NOTE: restoring 409 is NOT a fix for the creep ping-pong. c5 was driven at 17:44 with the
+# 409 floor already in place and still had extreme sub-10 km/h ping-pong; the flat-650
+# commit landed later at 19:25 and was never driven. This revert only returns to the known
+# baseline instead of shipping an undriven change predicted to be worse. The actual creep
+# fix is a control change: fade the lateral-accel PID out below ~2 m/s and let the low-speed
+# angle assist own the loop (it also survives standstill steering).
+CANFD_STEER_MAX_SPEED_BP = [5.0, 6.5, 15.0, 17.0]  # m/s
+STARPILOT_STEER_MAX_V = [409, 650, 650, 409]
 STARPILOT_STEER_MAX_REF = 409  # StarPilot / unsaturated-gain reference
 STARPILOT_STEER_MAX = 650  # worst-case envelope (carcontroller + safety)
 STARPILOT_STEER_DRIVER_ALLOWANCE = 75    # StarPilot ships 100; softened per request
