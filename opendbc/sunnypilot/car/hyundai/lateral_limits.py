@@ -28,23 +28,18 @@ CANFD_STEER_DELTA_DOWN_V = [8, 3]
 # Unsaturated mapping is kept at the StarPilot 409/3.66 = 112 CAN per m/s^2 by scheduling
 # latAccelFactor with STEER_MAX in the controller profile.
 #
-# The low end stays 409 because that band is a P relay, not torque starvation. Measured on
-# 1a4 (engaged, hands-off): 2.8-4.0 m/s rails 58% of frames at |p|=7.33 vs |f|=0.67, and
-# 4.0-5.0 rails 32% at |p|=3.85 vs |f|=0.53 -- P is 6-11x the feedforward, so a taller rail
-# there is a bigger sawtooth, not more path. Genuine cornering demand only takes over by
-# 8-11 m/s (|f|=1.36, |dLA|=1.48). Every sustained (>=0.5 s) ceiling plateau in the route
-# sits between 5.7 and 9.6 m/s, so 650 is fully in by 6.5 m/s (23 km/h), covering the
-# 22-48 km/h corners that were torque-limited.
-#
-# The 15-17 m/s ramp-out is kept as-is for now. Note the same measurement shows only 1.7 s
-# of >=400 CAN above 11 m/s in the whole route (vs 11.7 s of sustained plateau below it),
-# so the upper half of this window is carrying the 650 gain over ~26k frames that never
-# ask for it -- a candidate for narrowing once the 650 drive is evaluated.
-#
-# The safety envelope (opendbc/safety/modes/hyundai_canfd.h .max_torque) must match the
-# peak, or safety silently clips/rejects commands at the rail.
-CANFD_STEER_MAX_SPEED_BP = [5.0, 6.5, 15.0, 17.0]  # m/s
-STARPILOT_STEER_MAX_V = [409, 650, 650, 409]
+# The low end is 650 (not 409) all the way down to 0 m/s. The original 409 floor was
+# justified as "that band is a P relay, not torque starvation -- a taller rail is a bigger
+# sawtooth, not more path." Driven Sep 1 (route 000001c5), that proved wrong: sub-10 km/h
+# was severely undrivable ping-pong, and the pegged-frame analysis showed the P term wants
+# more torque than 409 CAN in real full-lock corners (|P| p90 = 34.5; ~30% of low-speed
+# pegs fall in 409-650 CAN and unstuck at 650, the rest still peg but deliver 650 CAN
+# instead of 409 CAN -- more actual steering torque toward tracking, less understeer).
+# The normalized output swings +/-1.0 either way; 650 only raises the absolute CAN at the
+# peak, it does not widen the normalized sawtooth. So 650 down low is strictly more torque
+# toward the corner in every pegged frame.
+CANFD_STEER_MAX_SPEED_BP = [0.0, 6.5, 15.0, 17.0]  # m/s
+STARPILOT_STEER_MAX_V = [650, 650, 650, 409]
 STARPILOT_STEER_MAX_REF = 409  # StarPilot / unsaturated-gain reference
 STARPILOT_STEER_MAX = 650  # worst-case envelope (carcontroller + safety)
 STARPILOT_STEER_DRIVER_ALLOWANCE = 75    # StarPilot ships 100; softened per request
