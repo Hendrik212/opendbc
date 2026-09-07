@@ -40,6 +40,7 @@ class HyundaiFlagsSP(IntFlag):
   RADAR_LEAD_ONLY = 2 ** 12
   RADAR_FULL_RADAR = 2 ** 13
   LAT_TUNE_STARPILOT = 2 ** 14  # Ioniq 6: StarPilot lateral tune (see lateral_tunes/ioniq6_shaping.py)
+  LAT_TUNE_V3 = 2 ** 15  # v1 body + flat 650/10/8 CAN limits, no StarPilot profile (testing)
 
 
 # StarPilot Ioniq 6 lateral tune baseline. The controller owns these (see
@@ -55,6 +56,30 @@ IONIQ6_STARPILOT_TORQUE = {'LAT_ACCEL_FACTOR': 3.0, 'FRICTION': 0.09}
 # TorqueControlTune value that selects the StarPilot tune (v2). Kept next to the flag
 # so the one definition is shared.
 TORQUE_CONTROL_TUNE_STARPILOT = 2.0
+# v3: stock v1 control law + flat increased CAN limits (650/10/8), no StarPilot profile.
+TORQUE_CONTROL_TUNE_V3 = 3.0
+
+# TorqueControlTune values that ship the increased CAN steer limits (not necessarily the
+# StarPilot profile). v2 gets limits + profile; v3 gets limits only.
+INCREASED_LIMITS_TUNE_VERSIONS = {TORQUE_CONTROL_TUNE_STARPILOT, TORQUE_CONTROL_TUNE_V3}
+
+
+def has_increased_lat_limits(CP, torque_control_tune, enforce_torque_control) -> bool:
+  """True for any tune version that ships the increased CAN steer limits (v2 or v3).
+
+  Gates apply_lat_tune_canfd_limits on the card side. This is the umbrella predicate;
+  is_starpilot_lat_tune (below) is the narrower one that also gates the StarPilot profile.
+  """
+  from opendbc.car.hyundai.values import HyundaiFlags
+
+  if not enforce_torque_control:
+    return False
+  if CP.brand != 'hyundai' or not (CP.flags & HyundaiFlags.CANFD):
+    return False
+  try:
+    return float(torque_control_tune or 0.0) in INCREASED_LIMITS_TUNE_VERSIONS
+  except (TypeError, ValueError):
+    return False
 
 
 def is_starpilot_lat_tune(CP, torque_control_tune, enforce_torque_control) -> bool:

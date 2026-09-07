@@ -80,10 +80,34 @@ def friction_for_speed(v_ego: float, base_friction: float) -> float:
   return base_friction * STARPILOT_STEER_MAX_REF / steer_max_for_speed(v_ego)
 
 
+# Flat limits for v3 (testing): stock v1 control law under high authority. 650 STEER_MAX
+# and 10/8 rate across the whole speed band -- no speed schedule. The StarPilot rate ramp
+# and STEER_MAX schedule are deliberately absent: this isolates v1's control behaviour.
+V3_STEER_MAX = 650
+V3_STEER_DELTA_UP = 10
+V3_STEER_DELTA_DOWN = 8
+V3_STEER_DRIVER_ALLOWANCE = 75
+V3_STEER_DRIVER_MULTIPLIER = 2
+V3_STEER_THRESHOLD = 100
+
+
 def apply_lat_tune_canfd_limits(params, CP_SP, v_ego_raw: float) -> bool:
   """Apply the fork's CAN FD steer limits in place. Returns False if no fork tune is
   selected, in which case the caller applies the upstream limits verbatim."""
-  if CP_SP is None or not (CP_SP.flags & HyundaiFlagsSP.LAT_TUNE_STARPILOT):
+  if CP_SP is None:
+    return False
+
+  if CP_SP.flags & HyundaiFlagsSP.LAT_TUNE_V3:
+    # v3: flat 650/10/8, no speed schedule.
+    params.STEER_MAX = V3_STEER_MAX
+    params.STEER_DRIVER_ALLOWANCE = V3_STEER_DRIVER_ALLOWANCE
+    params.STEER_DRIVER_MULTIPLIER = V3_STEER_DRIVER_MULTIPLIER
+    params.STEER_THRESHOLD = V3_STEER_THRESHOLD
+    params.STEER_DELTA_UP = V3_STEER_DELTA_UP
+    params.STEER_DELTA_DOWN = V3_STEER_DELTA_DOWN
+    return True
+
+  if not (CP_SP.flags & HyundaiFlagsSP.LAT_TUNE_STARPILOT):
     return False
 
   params.STEER_MAX = steer_max_for_speed(v_ego_raw)
