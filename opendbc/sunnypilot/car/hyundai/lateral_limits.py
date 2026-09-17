@@ -56,13 +56,47 @@ def steer_max_for_speed(v_ego: float) -> int:
   return int(round(np.interp(v_ego, CANFD_STEER_MAX_SPEED_BP, STARPILOT_STEER_MAX_V)))
 
 
-def lat_accel_factor_for_speed(v_ego: float, base_factor: float) -> float:
-  """Keep CAN per m/s^2 constant as STEER_MAX changes: torque*STEER_MAX / (lataccel/factor)."""
-  return base_factor * steer_max_for_speed(v_ego) / STARPILOT_STEER_MAX_REF
+# --- LAF/friction ceiling (decoupled from the CAN STEER_MAX ceiling) ---
+# latAccelFactor and friction used to be derived straight from steer_max_for_speed, so the
+# controller-gain transition at 17.0 m/s (61.2 km/h) was welded to the CAN torque ceiling's
+# 650 -> 409 drop. The high-speed LAF/friction plateau is now scheduled against its own
+# ceiling that holds 650 to `high_speed_mps` (default 80 km/h) and ramps to 409 over
+# LAF_CEIL_RAMP m/s. steer_max_for_speed -- the real CAN ceiling -- still drops at 17.0 m/s
+# unchanged, so this is a pure controller-gain change above 61 km/h. The math is identical
+# to the old behaviour through 17.0 m/s (both ceilings are 650 there). Live-overridable via
+# the LatAccelFactorHighSpeedKmh param (<=0 = LAF_HIGH_SPEED_KMH_DEFAULT).
+LAF_HIGH_SPEED_KMH_DEFAULT = 80.0
+LAF_CEIL_PLATEAU = 650  # matches STARPILOT_STEER_MAX_V's 650 plateau
+LAF_CEIL_FLOOR = 409    # matches STARPILOT_STEER_MAX_REF
+LAF_CEIL_RAMP = 2.0     # m/s width of the plateau->floor ramp (mirrors the 6.5->5.0 ramp)
 
 
-def friction_for_speed(v_ego: float, base_friction: float) -> float:
-  """Keep the friction term's CAN contribution constant as STEER_MAX changes.
+def laf_ceil_speed_bp(high_speed_mps: float) -> list[float]:
+  """Breakpoints for the LAF/friction ceiling: identical to the STEER_MAX schedule through
+  17.0 m/s, then the 650-plateau holds to high_speed_mps and ramps to 409 over LAF_CEIL_RAMP."""
+  return [5.0, 6.5, 15.0, 17.0, high_speed_mps, high_speed_mps + LAF_CEIL_RAMP]
+
+
+def laf_ceil_v() -> list[int]:
+  return [LAF_CEIL_FLOOR, LAF_CEIL_PLATEAU, LAF_CEIL_PLATEAU, LAF_CEIL_PLATEAU,
+          LAF_CEIL_PLATEAU, LAF_CEIL_FLOOR]
+
+
+def _laf_ceil_for_speed(v_ego: float, high_speed_mps: float) -> int:
+  return int(round(np.interp(v_ego, laf_ceil_speed_bp(high_speed_mps), laf_ceil_v())))
+
+
+def lat_accel_factor_for_speed(v_ego: float, base_factor: float, high_speed_mps: float | None = None) -> float:
+  """Keep CAN per m/s^2 constant as the LAF ceiling changes: torque*STEER_MAX / (lataccel/factor).
+  Scheduled against the decoupled LAF ceiling (high_speed_mps=None = LAF_HIGH_SPEED_KMH_DEFAULT),
+  NOT the real CAN STEER_MAX -- the controller-gain plateau extends past 61 km/h by design."""
+  if high_speed_mps is None:
+    high_speed_mps = LAF_HIGH_SPEED_KMH_DEFAULT / 3.6
+  return base_factor * _laf_ceil_for_speed(v_ego, high_speed_mps) / STARPILOT_STEER_MAX_REF
+
+
+def friction_for_speed(v_ego: float, base_friction: float, high_speed_mps: float | None = None) -> float:
+  """Keep the friction term's CAN contribution constant as the LAF ceiling changes.
 
   Scaling latAccelFactor (above) holds the P/I/FF paths at 112 CAN per m/s^2, but it does
   NOT cover friction: get_friction returns +/-friction*latAccelFactor in lat-accel space
@@ -75,9 +109,12 @@ def friction_for_speed(v_ego: float, base_friction: float) -> float:
 
   This is not a pure restoration: holding friction's CAN constant means its lat-accel-space
   contribution shrinks inside the 650 band. That is the right invariant only because
-  409/3.66 is what was actually tuned and driven.
+  409/3.66 is what was actually tuned and driven. Scheduled against the decoupled LAF
+  ceiling (high_speed_mps=None = LAF_HIGH_SPEED_KMH_DEFAULT), matching lat_accel_factor_for_speed.
   """
-  return base_friction * STARPILOT_STEER_MAX_REF / steer_max_for_speed(v_ego)
+  if high_speed_mps is None:
+    high_speed_mps = LAF_HIGH_SPEED_KMH_DEFAULT / 3.6
+  return base_friction * STARPILOT_STEER_MAX_REF / _laf_ceil_for_speed(v_ego, high_speed_mps)
 
 
 # Flat limits for v3 (testing): stock v1 control law under high authority. 650 STEER_MAX
