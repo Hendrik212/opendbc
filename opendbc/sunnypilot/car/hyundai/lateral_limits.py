@@ -17,104 +17,27 @@ CANFD_STEER_RATE_SPEED_BP = [17., 19.4]  # m/s
 CANFD_STEER_DELTA_UP_V = [10, 2]
 CANFD_STEER_DELTA_DOWN_V = [8, 3]
 
-# Speed-scheduled STEER_MAX. carcontroller computes `torque * STEER_MAX`, so this is also
-# the plant gain unless latAccelFactor is scaled with it (see lat_accel_factor_for_speed).
-#
-# Route 000001a4 tight corners at CAN 409: desired 2.91 vs actual 2.35; linear CAN to match
-# was p50=509 / p90=625. The mid band ceiling was 600 (covering the median and most of p90)
-# and is now 650 -- raised after the Aug 31 600-drive analysis showed tight-corner torque
-# demand reaching the rail (|output|>0.95 on 2-6% of tight-corner frames, actuators.torque
-# clipped at 1.0 ~92% of those), giving more headroom for the tightest low-speed corners.
-# Unsaturated mapping is kept at the StarPilot 409/3.66 = 112 CAN per m/s^2 by scheduling
-# latAccelFactor with STEER_MAX in the controller profile.
-#
-# The low end stays 409. A flat-650 low end was briefly deployed (e61b28a0, Sep 1) on the
-# argument that "normalized output swings +/-1.0 either way, so 650 only raises peak CAN,
-# not the sawtooth." That is backwards and is reverted here: the EPS sees CAN, and
-# STEER_DELTA_UP is a flat 10 CAN/frame below 17 m/s (CANFD_STEER_RATE_SPEED_BP), so a
-# taller rail LENGTHENS every rail-to-rail traversal -- lower flip frequency, larger wheel
-# excursion per half-cycle. Route 000001c5's own analysis found the sub-23 km/h problem is
-# P-relay pegging plus the angle-assist handoff, explicitly "not torque starvation", which
-# argues against a taller creep rail rather than for one.
-#
-# NOTE: restoring 409 is NOT a fix for the creep ping-pong. c5 was driven at 17:44 with the
-# 409 floor already in place and still had extreme sub-10 km/h ping-pong; the flat-650
-# commit landed later at 19:25 and was never driven. This revert only returns to the known
-# baseline instead of shipping an undriven change predicted to be worse. The actual creep
-# fix is a control change: fade the lateral-accel PID out below ~2 m/s and let the low-speed
-# angle assist own the loop (it also survives standstill steering).
-CANFD_STEER_MAX_SPEED_BP = [5.0, 6.5, 15.0, 17.0]  # m/s
-STARPILOT_STEER_MAX_V = [409, 650, 650, 409]
-STARPILOT_STEER_MAX_REF = 409  # StarPilot / unsaturated-gain reference
-STARPILOT_STEER_MAX = 650  # worst-case envelope (carcontroller + safety)
+# StarPilot CANFD: flat 409 rail at every speed (opendbc/car/hyundai/values.py). A
+# speed-scheduled 650 mid-band was a fork experiment; it is reverted. panda safety
+# may still allow 650 -- that is an envelope, not the command.
+STARPILOT_STEER_MAX = 409
 STARPILOT_STEER_DRIVER_ALLOWANCE = 75    # StarPilot ships 100; softened per request
 STARPILOT_STEER_DRIVER_MULTIPLIER = 2
 STARPILOT_STEER_THRESHOLD = 100
 
 
 def steer_max_for_speed(v_ego: float) -> int:
-  return int(round(np.interp(v_ego, CANFD_STEER_MAX_SPEED_BP, STARPILOT_STEER_MAX_V)))
+  return STARPILOT_STEER_MAX
 
 
-# --- LAF/friction ceiling (decoupled from the CAN STEER_MAX ceiling) ---
-# latAccelFactor and friction used to be derived straight from steer_max_for_speed, so the
-# controller-gain transition at 17.0 m/s (61.2 km/h) was welded to the CAN torque ceiling's
-# 650 -> 409 drop. The high-speed LAF/friction plateau is now scheduled against its own
-# ceiling that holds 650 to `high_speed_mps` (default 80 km/h) and ramps to 409 over
-# LAF_CEIL_RAMP m/s. steer_max_for_speed -- the real CAN ceiling -- still drops at 17.0 m/s
-# unchanged, so this is a pure controller-gain change above 61 km/h. The math is identical
-# to the old behaviour through 17.0 m/s (both ceilings are 650 there). Live-overridable via
-# the LatAccelFactorHighSpeedKmh param (<=0 = LAF_HIGH_SPEED_KMH_DEFAULT).
-LAF_HIGH_SPEED_KMH_DEFAULT = 80.0
-LAF_CEIL_PLATEAU = 650  # matches STARPILOT_STEER_MAX_V's 650 plateau
-LAF_CEIL_FLOOR = 409    # matches STARPILOT_STEER_MAX_REF
-LAF_CEIL_RAMP = 2.0     # m/s width of the plateau->floor ramp (mirrors the 6.5->5.0 ramp)
+def lat_accel_factor_for_speed(v_ego: float, base_factor: float) -> float:
+  """Identity at the StarPilot rail: STEER_MAX is 409 at every speed."""
+  return base_factor * steer_max_for_speed(v_ego) / STARPILOT_STEER_MAX
 
 
-def laf_ceil_speed_bp(high_speed_mps: float) -> list[float]:
-  """Breakpoints for the LAF/friction ceiling: identical to the STEER_MAX schedule through
-  17.0 m/s, then the 650-plateau holds to high_speed_mps and ramps to 409 over LAF_CEIL_RAMP."""
-  return [5.0, 6.5, 15.0, 17.0, high_speed_mps, high_speed_mps + LAF_CEIL_RAMP]
-
-
-def laf_ceil_v() -> list[int]:
-  return [LAF_CEIL_FLOOR, LAF_CEIL_PLATEAU, LAF_CEIL_PLATEAU, LAF_CEIL_PLATEAU,
-          LAF_CEIL_PLATEAU, LAF_CEIL_FLOOR]
-
-
-def _laf_ceil_for_speed(v_ego: float, high_speed_mps: float) -> int:
-  return int(round(np.interp(v_ego, laf_ceil_speed_bp(high_speed_mps), laf_ceil_v())))
-
-
-def lat_accel_factor_for_speed(v_ego: float, base_factor: float, high_speed_mps: float | None = None) -> float:
-  """Keep CAN per m/s^2 constant as the LAF ceiling changes: torque*STEER_MAX / (lataccel/factor).
-  Scheduled against the decoupled LAF ceiling (high_speed_mps=None = LAF_HIGH_SPEED_KMH_DEFAULT),
-  NOT the real CAN STEER_MAX -- the controller-gain plateau extends past 61 km/h by design."""
-  if high_speed_mps is None:
-    high_speed_mps = LAF_HIGH_SPEED_KMH_DEFAULT / 3.6
-  return base_factor * _laf_ceil_for_speed(v_ego, high_speed_mps) / STARPILOT_STEER_MAX_REF
-
-
-def friction_for_speed(v_ego: float, base_friction: float, high_speed_mps: float | None = None) -> float:
-  """Keep the friction term's CAN contribution constant as the LAF ceiling changes.
-
-  Scaling latAccelFactor (above) holds the P/I/FF paths at 112 CAN per m/s^2, but it does
-  NOT cover friction: get_friction returns +/-friction*latAccelFactor in lat-accel space
-  (opendbc/car/lateral.py) and the controller divides the summed feedforward by
-  latAccelFactor on the way out, so the two cancel and friction's NORMALIZED torque is
-  exactly `friction`. Its CAN value is therefore friction*STEER_MAX, and raising the
-  ceiling alone turns a 0.09*409 = 37 CAN breakaway kick into 0.09*650 = 58.5 -- a 58% gain
-  change on the one term that is a square wave through every error sign change, landing in
-  the same band that already flips 1.6-1.8 times a second.
-
-  This is not a pure restoration: holding friction's CAN constant means its lat-accel-space
-  contribution shrinks inside the 650 band. That is the right invariant only because
-  409/3.66 is what was actually tuned and driven. Scheduled against the decoupled LAF
-  ceiling (high_speed_mps=None = LAF_HIGH_SPEED_KMH_DEFAULT), matching lat_accel_factor_for_speed.
-  """
-  if high_speed_mps is None:
-    high_speed_mps = LAF_HIGH_SPEED_KMH_DEFAULT / 3.6
-  return base_friction * STARPILOT_STEER_MAX_REF / _laf_ceil_for_speed(v_ego, high_speed_mps)
+def friction_for_speed(v_ego: float, base_friction: float) -> float:
+  """Identity at the StarPilot rail: STEER_MAX is 409 at every speed."""
+  return base_friction * STARPILOT_STEER_MAX / steer_max_for_speed(v_ego)
 
 
 # Flat limits for v3 (testing): stock v1 control law under high authority. 650 STEER_MAX
