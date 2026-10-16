@@ -1,7 +1,7 @@
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus, DT_CTRL, make_tester_present_msg, structs
-from opendbc.car.lateral import apply_driver_steer_torque_limits, common_fault_avoidance
+from opendbc.car.lateral import common_fault_avoidance
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.hyundai import hyundaicanfd, hyundaican
 from opendbc.car.hyundai.hyundaicanfd import CanBus
@@ -9,6 +9,7 @@ from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParam
 from opendbc.car.interfaces import CarControllerBase
 
 from opendbc.sunnypilot.car.hyundai.escc import EsccCarController
+from opendbc.sunnypilot.car.hyundai.lateral_limits import apply_headroom_driver_limits
 from opendbc.sunnypilot.car.hyundai.icbm import IntelligentCruiseButtonManagementInterface
 from opendbc.sunnypilot.car.hyundai.longitudinal.controller import LongitudinalController
 from opendbc.sunnypilot.car.hyundai.lead_data_ext import LeadDataCarController
@@ -91,8 +92,8 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
       self.params = CarControllerParams(self.CP, CS.out.vEgoRaw, CP_SP=self.CP_SP)
 
     # steering torque
-    new_torque = int(round(actuators.torque * self.params.STEER_MAX))
-    apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, self.params)
+    new_torque = int(round(actuators.torque * self.params.STEER_SCALE))
+    apply_torque = apply_headroom_driver_limits(new_torque, self.apply_torque_last, CS.out.steeringTorque, self.params)
 
     # >90 degree steering fault prevention
     self.angle_limit_counter, apply_steer_req = common_fault_avoidance(abs(CS.out.steeringAngleDeg) >= MAX_ANGLE, CC.latActive,
@@ -146,7 +147,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CS, CC_SP, self.packer, self.frame, self.last_button_frame, self.CAN))
 
     new_actuators = actuators.as_builder()
-    new_actuators.torque = apply_torque / self.params.STEER_MAX
+    new_actuators.torque = apply_torque / self.params.STEER_SCALE
     new_actuators.torqueOutputCan = apply_torque
     new_actuators.accel = self.tuning.actual_accel
 

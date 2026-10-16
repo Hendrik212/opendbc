@@ -61,6 +61,10 @@ class CarControllerParams:
     else:
       self.STEER_MAX = 384
 
+    # command scale (torque 1.0 = STEER_SCALE CAN); a fork tune may clip above it (STEER_MAX)
+    if not hasattr(self, "STEER_SCALE"):
+      self.STEER_SCALE = self.STEER_MAX
+
 
 class HyundaiSafetyFlags(IntFlag):
   EV_GAS = 1
