@@ -42,14 +42,22 @@ def steer_max_for_speed(v_ego: float) -> int:
 HEADROOM_SPEED_BP = [5.0, 6.5, 13.9, 15.3]  # m/s: 18 / 23.4 / 50 / 55 km/h
 DEFAULT_HEADROOM_CAN = 600
 DEFAULT_DELTA_DOWN_LOW = 10
+# Driver allowance in the same band (SteerDriverAllowanceLow, default = the StarPilot 75).
+# Route 267 (2026-11-03) tight corners: during turn-in the torque sensor read 58-87 CAN
+# against the command with no override registered (hands resting on the wheel); at 75 that
+# took the allowed torque from the 650 clip to ~385 CAN in 44-60% of the limited turn-in
+# frames. Clamped to panda's driver_torque_allowance (250).
+PANDA_DRIVER_ALLOWANCE = 250
 PANDA_MAX_TORQUE = 650  # opendbc/safety/modes/hyundai_canfd.h max_torque
 PANDA_MAX_RATE_DOWN = 10  # ... max_rate_down
 
-_live = {"headroom_can": DEFAULT_HEADROOM_CAN, "delta_down_low": DEFAULT_DELTA_DOWN_LOW}
+_live = {"headroom_can": DEFAULT_HEADROOM_CAN, "delta_down_low": DEFAULT_DELTA_DOWN_LOW,
+         "driver_allowance_low": STARPILOT_STEER_DRIVER_ALLOWANCE}
 
 
-def set_live_limits(headroom_can, delta_down_low) -> None:
-  """card's params thread: SteerHeadroomCan (<= 409 = off), SteerDeltaDownLow (8 = previous)."""
+def set_live_limits(headroom_can, delta_down_low, driver_allowance_low=STARPILOT_STEER_DRIVER_ALLOWANCE) -> None:
+  """card's params thread: SteerHeadroomCan (<= 409 = off), SteerDeltaDownLow (8 = previous),
+  SteerDriverAllowanceLow (75 = previous)."""
   try:
     _live["headroom_can"] = int(min(max(float(headroom_can), STARPILOT_STEER_MAX), PANDA_MAX_TORQUE))
   except (TypeError, ValueError):
@@ -58,6 +66,11 @@ def set_live_limits(headroom_can, delta_down_low) -> None:
     _live["delta_down_low"] = int(min(max(int(float(delta_down_low)), 1), PANDA_MAX_RATE_DOWN))
   except (TypeError, ValueError):
     _live["delta_down_low"] = DEFAULT_DELTA_DOWN_LOW
+  try:
+    _live["driver_allowance_low"] = int(min(max(float(driver_allowance_low), STARPILOT_STEER_DRIVER_ALLOWANCE),
+                                            PANDA_DRIVER_ALLOWANCE))
+  except (TypeError, ValueError):
+    _live["driver_allowance_low"] = STARPILOT_STEER_DRIVER_ALLOWANCE
 
 
 def headroom_ratio(v_ego: float, headroom_can: float | None = None) -> float:
@@ -130,7 +143,9 @@ def apply_lat_tune_canfd_limits(params, CP_SP, v_ego_raw: float) -> bool:
 
   params.STEER_SCALE = steer_max_for_speed(v_ego_raw)
   params.STEER_MAX = int(round(params.STEER_SCALE * headroom_ratio(v_ego_raw)))
-  params.STEER_DRIVER_ALLOWANCE = STARPILOT_STEER_DRIVER_ALLOWANCE
+  a = _live["driver_allowance_low"]
+  params.STEER_DRIVER_ALLOWANCE = int(round(np.interp(v_ego_raw, HEADROOM_SPEED_BP,
+                                                      [STARPILOT_STEER_DRIVER_ALLOWANCE, a, a, STARPILOT_STEER_DRIVER_ALLOWANCE])))
   params.STEER_DRIVER_MULTIPLIER = STARPILOT_STEER_DRIVER_MULTIPLIER
   params.STEER_THRESHOLD = STARPILOT_STEER_THRESHOLD
   params.STEER_DELTA_UP = int(round(np.interp(v_ego_raw, CANFD_STEER_RATE_SPEED_BP, CANFD_STEER_DELTA_UP_V)))
