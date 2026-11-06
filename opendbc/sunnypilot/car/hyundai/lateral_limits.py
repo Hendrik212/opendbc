@@ -15,7 +15,7 @@ from opendbc.sunnypilot.car.hyundai.values import HyundaiFlagsSP
 # saturation at 54-70 km/h falling 44% -> 3% of curve frames with no tracking cost, so we
 # ramp rather than StarPilot's hard step at 15 m/s. Back to 2/3 by 19.4 m/s = 70 km/h.
 CANFD_STEER_RATE_SPEED_BP = [17., 19.4]  # m/s
-CANFD_STEER_DELTA_UP_V = [10, 2]
+CANFD_STEER_DELTA_UP_V = [10, 2]  # low-speed end is live: SteerDeltaUpLow (default 10)
 CANFD_STEER_DELTA_DOWN_V = [8, 3]  # low-speed end is live: SteerDeltaDownLow (default 10)
 
 # StarPilot CANFD: flat 409 rail at every speed (opendbc/car/hyundai/values.py). A
@@ -42,22 +42,27 @@ def steer_max_for_speed(v_ego: float) -> int:
 HEADROOM_SPEED_BP = [5.0, 6.5, 13.9, 15.3]  # m/s: 18 / 23.4 / 50 / 55 km/h
 DEFAULT_HEADROOM_CAN = 600
 DEFAULT_DELTA_DOWN_LOW = 10
+DEFAULT_DELTA_UP_LOW = 10
 # Driver allowance in the same band (SteerDriverAllowanceLow, default = the StarPilot 75).
 # Route 267 (2026-11-03) tight corners: during turn-in the torque sensor read 58-87 CAN
 # against the command with no override registered (hands resting on the wheel); at 75 that
 # took the allowed torque from the 650 clip to ~385 CAN in 44-60% of the limited turn-in
 # frames. Clamped to panda's driver_torque_allowance (250).
 PANDA_DRIVER_ALLOWANCE = 250
-PANDA_MAX_TORQUE = 650  # opendbc/safety/modes/hyundai_canfd.h max_torque
-PANDA_MAX_RATE_DOWN = 10  # ... max_rate_down
+# EPS limit test (2026-11-06): panda now allows the signal's full range, so SteerHeadroomCan
+# and the low-speed rates can be raised live until the EPS itself faults. Defaults unchanged.
+PANDA_MAX_TORQUE = 1023  # opendbc/safety/modes/hyundai_canfd.h max_torque
+PANDA_MAX_RATE_UP = 50  # ... max_rate_up
+PANDA_MAX_RATE_DOWN = 50  # ... max_rate_down
 
 _live = {"headroom_can": DEFAULT_HEADROOM_CAN, "delta_down_low": DEFAULT_DELTA_DOWN_LOW,
-         "driver_allowance_low": STARPILOT_STEER_DRIVER_ALLOWANCE}
+         "driver_allowance_low": STARPILOT_STEER_DRIVER_ALLOWANCE, "delta_up_low": DEFAULT_DELTA_UP_LOW}
 
 
-def set_live_limits(headroom_can, delta_down_low, driver_allowance_low=STARPILOT_STEER_DRIVER_ALLOWANCE) -> None:
+def set_live_limits(headroom_can, delta_down_low, driver_allowance_low=STARPILOT_STEER_DRIVER_ALLOWANCE,
+                    delta_up_low=DEFAULT_DELTA_UP_LOW) -> None:
   """card's params thread: SteerHeadroomCan (<= 409 = off), SteerDeltaDownLow (8 = previous),
-  SteerDriverAllowanceLow (75 = previous)."""
+  SteerDriverAllowanceLow (75 = previous), SteerDeltaUpLow (10 = previous)."""
   try:
     _live["headroom_can"] = int(min(max(float(headroom_can), STARPILOT_STEER_MAX), PANDA_MAX_TORQUE))
   except (TypeError, ValueError):
@@ -66,6 +71,10 @@ def set_live_limits(headroom_can, delta_down_low, driver_allowance_low=STARPILOT
     _live["delta_down_low"] = int(min(max(int(float(delta_down_low)), 1), PANDA_MAX_RATE_DOWN))
   except (TypeError, ValueError):
     _live["delta_down_low"] = DEFAULT_DELTA_DOWN_LOW
+  try:
+    _live["delta_up_low"] = int(min(max(int(float(delta_up_low)), 1), PANDA_MAX_RATE_UP))
+  except (TypeError, ValueError):
+    _live["delta_up_low"] = DEFAULT_DELTA_UP_LOW
   try:
     _live["driver_allowance_low"] = int(min(max(float(driver_allowance_low), STARPILOT_STEER_DRIVER_ALLOWANCE),
                                             PANDA_DRIVER_ALLOWANCE))
@@ -148,7 +157,8 @@ def apply_lat_tune_canfd_limits(params, CP_SP, v_ego_raw: float) -> bool:
                                                       [STARPILOT_STEER_DRIVER_ALLOWANCE, a, a, STARPILOT_STEER_DRIVER_ALLOWANCE])))
   params.STEER_DRIVER_MULTIPLIER = STARPILOT_STEER_DRIVER_MULTIPLIER
   params.STEER_THRESHOLD = STARPILOT_STEER_THRESHOLD
-  params.STEER_DELTA_UP = int(round(np.interp(v_ego_raw, CANFD_STEER_RATE_SPEED_BP, CANFD_STEER_DELTA_UP_V)))
+  params.STEER_DELTA_UP = int(round(np.interp(v_ego_raw, CANFD_STEER_RATE_SPEED_BP,
+                                              [_live["delta_up_low"], CANFD_STEER_DELTA_UP_V[1]])))
   params.STEER_DELTA_DOWN = int(round(np.interp(v_ego_raw, CANFD_STEER_RATE_SPEED_BP,
                                                 [_live["delta_down_low"], CANFD_STEER_DELTA_DOWN_V[1]])))
   return True

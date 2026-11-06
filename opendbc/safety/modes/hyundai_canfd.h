@@ -142,21 +142,20 @@ static void hyundai_canfd_rx_hook(const CANPacket_t *msg) {
 
 static bool hyundai_canfd_tx_hook(const CANPacket_t *msg) {
   const TorqueSteeringLimits HYUNDAI_CANFD_STEERING_LIMITS = {
-    // Union envelope for upstream (270) and StarPilot (speed-scheduled, peak 650) CANFD
-    // tunes. The car layer (CarControllerParams) selects which and tightens inside this
-    // envelope, so panda never blocks a legitimate command from either tune. Rate 10/10 is
-    // sized for the low-speed branch (panda has no speed lookup for rate limits; the
-    // tighter 2/3 above 19.4 m/s is enforced by the car layer), and max_rt_delta = 375
-    // covers 10 * 25 frames over one MAX_RT_INTERVAL (250 ms). Leaving max_rt_delta too
-    // low while raising the rate is what broke earlier attempts (a6095657, 95dc60fe): the
-    // RT check rejected every message once a slew exceeded it, resetting
-    // desired_torque_last to 0 -- the dropout-and-re-ramp "wobble". max_rt_delta is
-    // proportional to max_rate_up (not max_torque), so it stays 375 when only the
-    // ceiling rises.
-    .max_torque = 650,
-    .max_rt_delta = 375,
-    .max_rate_up = 10,
-    .max_rate_down = 10,
+    // Union envelope for upstream (270) and StarPilot (speed-scheduled) CANFD tunes. The car
+    // layer (CarControllerParams) selects which and tightens inside this envelope, so panda
+    // never blocks a legitimate command from either tune. Widened 2026-11-06 to the signal's
+    // own range (11 bits: +-1023) and 50/frame so a live-param limit test can find where the
+    // EPS itself faults; the car layer still defaults to 600 / 10 per frame below 61 km/h and
+    // 2/3 above 70 km/h (panda has no speed lookup for rate limits). max_rt_delta must cover
+    // max_rate_up * 25 frames over one MAX_RT_INTERVAL (250 ms), with the same 1.5x margin as
+    // before: leaving it too low while raising the rate is what broke earlier attempts
+    // (a6095657, 95dc60fe) -- the RT check rejected every message once a slew exceeded it,
+    // resetting desired_torque_last to 0, the dropout-and-re-ramp "wobble".
+    .max_torque = 1023,
+    .max_rt_delta = 1875,
+    .max_rate_up = 50,
+    .max_rate_down = 50,
     .driver_torque_allowance = 250,
     .driver_torque_multiplier = 2,
     .type = TorqueDriverLimited,

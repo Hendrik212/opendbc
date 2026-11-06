@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from opendbc.testing import parameterized_class
 import unittest
+import numpy as np
 
 from opendbc.car.hyundai.values import HyundaiSafetyFlags
 from opendbc.car.structs import CarParams
@@ -28,11 +29,11 @@ class TestHyundaiCanfdBase(HyundaiButtonBase, common.CarSafetyTest, common.Drive
   STANDSTILL_THRESHOLD = 12  # 0.375 kph
   FWD_BLACKLISTED_ADDRS = {2: [0x50, 0x2a4]}
 
-  MAX_RATE_UP = 10
-  MAX_RATE_DOWN = 10
-  MAX_TORQUE_LOOKUP = [0], [650]
+  MAX_RATE_UP = 50
+  MAX_RATE_DOWN = 50
+  MAX_TORQUE_LOOKUP = [0], [1023]
 
-  MAX_RT_DELTA = 375
+  MAX_RT_DELTA = 1875
 
   DRIVER_TORQUE_ALLOWANCE = 250
   DRIVER_TORQUE_FACTOR = 2
@@ -47,6 +48,20 @@ class TestHyundaiCanfdBase(HyundaiButtonBase, common.CarSafetyTest, common.Drive
   STEER_MSG = ""
   GAS_MSG = ("", "")
   BUTTONS_TX_BUS = 1
+
+  def test_realtime_limits(self):
+    # EPS limit-test envelope: MAX_RT_DELTA (1875, sized for 50/frame) is above MAX_TORQUE (1023),
+    # and the RT check is measured from max(last, 0), so it cannot bind inside the torque limit.
+    # Only the per-frame rate and the absolute limit apply; check exactly that.
+    self.safety.set_controls_allowed(True)
+    max_torque = self.MAX_TORQUE_LOOKUP[1][0]
+    for sign in [-1, 1]:
+      self.safety.init_tests()
+      self._set_prev_torque(-sign * max_torque)
+      self._reset_torque_driver_measurement(0)
+      for t in np.arange(-max_torque, max_torque + 1, self.MAX_RATE_UP):
+        self.assertTrue(self._tx(self._torque_cmd_msg(sign * t)))
+      self.assertFalse(self._tx(self._torque_cmd_msg(sign * (max_torque + 1))))
 
   def _torque_driver_msg(self, torque):
     values = {"MDPS_StrTqSnsrVal": torque}
