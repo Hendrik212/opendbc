@@ -27,12 +27,12 @@ MQTT Data Extraction for Hyundai Ioniq 6
     - Monotonically increasing (never drops) - cleanest signal
     - Example: 0x81 0x00 = 129 km, 0xA0 0x00 = 160 km
 
-- 0x41c (1052, Bus 1): Connector Status
-  * Byte 0, bit 3: Charging connector plugged status
-    - 1 = Connector plugged in
-    - 0 = Connector not connected
-    - Verified across multiple plug/unplug cycles with car awake
-    - Message persists when car is idle (unlike 0x035 which disappears)
+- 0x405 (1029, Bus 1): Connector Status
+  * Byte 1, bit 0x20: set = no cable plugged in (byte 0 is the frame checksum)
+    - plugged `e4 00 00..`, unplugged `8b 20 00..`; held across plugged -> unplugged -> plugged wake
+      captures on 2026-11-09, including a fuller wake than the unplugged one
+    - 0x41c was used before: its byte 0 is a checksum and byte 1 a counter, so the old "bit 3" was noise,
+      and its content is identical plugged and unplugged
 
 - 0x1f5 (501, Bus 1): Charge Limits
   * Byte 26: AC charge limit (value / 2 = percentage)
@@ -61,8 +61,6 @@ Note: Charging status is now derived from charging power (voltage * current).
 
 import openpilot.cereal.messaging as messaging
 import time
-from panda import Panda
-from opendbc.car.structs import CarParams
 
 # Debug flag: Enable raw message publishing for connector bit detection
 DEBUG_RAW_MESSAGES = True
@@ -81,7 +79,7 @@ charging_current_out = -1.0
 charging_power_out = -1.0
 charging_time_remaining_out = -1
 charging_status_out = "unknown"
-connector_connected_out = None  # unknown until the first 0x41c frame: a sleeping car sends none, so False would read as unplugged
+connector_connected_out = None  # unknown until the first 0x405 frame: a sleeping car sends none, so False would read as unplugged
 charge_limit_ac_out = -1  # AC charge limit percentage
 charge_limit_dc_out = -1  # DC charge limit percentage
 ac_power_limit_pct_out = -1  # AC power limit setting (100, 90, or 60%)
@@ -104,87 +102,6 @@ _prev_scanner_content = {}  # {address: bytes} - previous published state
 _last_scanner_publish_time = 0
 _SCANNER_PUBLISH_INTERVAL = 10.0  # seconds
 
-# UDS Tester Present service type
-UDS_TESTER_PRESENT = 0x3E
-
-# Wake CAN bus addresses for Hyundai CAN FD
-# Try multiple ECU addresses to wake various systems
-WAKE_ADDRESSES = [
-    0x7df,  # OBD2 functional broadcast - reaches ALL ECUs
-    0x7e4,  # BMS (Battery Management System) - common Hyundai address
-    0x7e2,  # OBD/Powertrain ECU
-    0x7d0,  # ADAS ECU
-    0x7b1,  # Body ECU
-    0x7c4,  # Instrument cluster
-]
-# Try both buses - ECAN (0) and ACAN (1) for CAN FD
-WAKE_BUSES = [0, 1]
-
-# UDS Services to try
-UDS_READ_DATA_BY_ID = 0x22  # Read Data By Identifier
-UDS_DIAGNOSTIC_SESSION = 0x10  # Diagnostic Session Control
-
-
-def wakeCanBus():
-    """
-    Send UDS Tester Present messages to wake the CAN bus.
-
-    Uses Panda with SAFETY_ALLOUTPUT to bypass normal safety restrictions.
-    Sends to multiple ECU addresses on both ECAN (bus 0) and ACAN (bus 1).
-
-    Returns True if messages were sent successfully, False otherwise.
-    """
-    import traceback
-    try:
-        with open("/tmp/wake_debug.log", "a") as f:
-            f.write("wakeCanBus called\n")
-        print("[MQTT] Connecting to Panda for wake...", flush=True)
-        panda = Panda()
-        with open("/tmp/wake_debug.log", "a") as f:
-            f.write("Panda connected\n")
-        panda.set_safety_mode(CarParams.SafetyModel.allOutput)
-        with open("/tmp/wake_debug.log", "a") as f:
-            f.write("Safety mode set to ALLOUTPUT\n")
-        print("[MQTT] Panda connected, safety mode set to ALLOUTPUT", flush=True)
-
-        # Send wake messages for 5 seconds to keep bus awake
-        import time as wake_time
-        wake_start = wake_time.monotonic()
-        wake_duration = 5.0  # seconds
-        cycle_count = 0
-
-        with open("/tmp/wake_debug.log", "a") as f:
-            f.write(f"Starting sustained wake for {wake_duration} seconds\n")
-
-        while wake_time.monotonic() - wake_start < wake_duration:
-            for bus in WAKE_BUSES:
-                # Focus on OBD2 broadcast which should reach all ECUs
-                addr = 0x7df
-
-                # Diagnostic Session Control - Default Session
-                dat_session = bytes([0x02, UDS_DIAGNOSTIC_SESSION, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00])
-                panda.can_send(addr, dat_session, bus)
-
-                # Tester Present
-                dat_tester = bytes([0x02, UDS_TESTER_PRESENT, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00])
-                panda.can_send(addr, dat_tester, bus)
-
-            cycle_count += 1
-            wake_time.sleep(0.05)  # 50ms between cycles = 20Hz
-
-        with open("/tmp/wake_debug.log", "a") as f:
-            f.write(f"Sent {cycle_count} wake cycles over {wake_duration}s\n")
-        print(f"[MQTT] Sent {cycle_count} wake cycles over {wake_duration}s", flush=True)
-
-        return True
-    except Exception as e:
-        with open("/tmp/wake_debug.log", "a") as f:
-            f.write(f"EXCEPTION: {e}\n")
-            f.write(traceback.format_exc())
-        print(f"[MQTT] Wake CAN bus failed: {e}", flush=True)
-        return False
-
-
 def _bytes_to_hex(data):
     """Convert byte array to hex string (e.g., [72, 16, 79] -> '48104F')"""
     return ''.join(f'{b:02X}' for b in data)
@@ -197,7 +114,7 @@ def getParsedMessages(msgs, bus, dat, pm=None):
     Hyundai Ioniq 6 verified metrics:
     - 0x2fa (762): SOC, pack voltage, charging current, charging time remaining
     - 0x2b5 (693): Range
-    - 0x41c (1052): Connector plugged status
+    - 0x405 (1029): Connector plugged status
 
     Args:
         msgs: List of CAN messages from cereal
@@ -284,12 +201,10 @@ def getParsedMessages(msgs, bus, dat, pm=None):
                     range_km = data[8] | (data[9] << 8)
                     range_out = range_km
 
-            # Message 0x41c (1052, Bus 1): Connector Status
-            if address == 0x41c and msg_bus == 1:
-                if len(data) >= 1:
-                    # Byte 0, bit 3: Connector plugged status
-                    # 1 = Plugged, 0 = Unplugged
-                    connector_connected_out = (data[0] & 0x08) != 0
+            # Message 0x405 (1029, Bus 1): Connector Status, byte 1 bit 0x20 set = unplugged
+            if address == 0x405 and msg_bus == 1:
+                if len(data) >= 2:
+                    connector_connected_out = (data[1] & 0x20) == 0
 
             # Message 0x1f5 (501): Charge Limits (Bus 1)
             if address == 0x1f5 and msg_bus == 1:
