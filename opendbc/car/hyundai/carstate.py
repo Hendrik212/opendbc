@@ -182,7 +182,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
       ret.stockFcw = (aeb_warning or scc_warning) and not aeb_braking
       ret.stockAeb = aeb_warning and aeb_braking
 
-    if self.CP.enableBsm:
+    if self.CP.flags & HyundaiFlags.HAS_BSM:
       ret.leftBlindspot = cp.vl["LCA11"]["CF_Lca_IndLeft"] != 0
       ret.rightBlindspot = cp.vl["LCA11"]["CF_Lca_IndRight"] != 0
 
@@ -260,12 +260,12 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
 
     # TODO: alt signal usage may be described by cp.vl['BLINKERS']['USE_ALT_LAMP']
     left_blinker_sig, right_blinker_sig = "LEFT_LAMP", "RIGHT_LAMP"
-    if self.CP.carFingerprint == CAR.HYUNDAI_KONA_EV_2ND_GEN:
+    if self.CP.carFingerprint == CAR.HYUNDAI_KONA_EV_2ND_GEN or self.CP_SP.flags & HyundaiFlagsSP.CCNC:
       left_blinker_sig, right_blinker_sig = "LEFT_LAMP_ALT", "RIGHT_LAMP_ALT"
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_lamp(50, cp.vl["BLINKERS"][left_blinker_sig],
                                                                       cp.vl["BLINKERS"][right_blinker_sig])
     # BSM signals only available when ADAS ECU is active (not in openpilot longitudinal mode)
-    if self.CP.enableBsm and not self.CP.openpilotLongitudinalControl:
+    if self.CP.flags & HyundaiFlags.HAS_BSM and not self.CP.openpilotLongitudinalControl:
       ret.leftBlindspot = bool(cp.vl["ADAS_CMD_50_50ms"]["BCW_LtIndSta"])
       ret.rightBlindspot = bool(cp.vl["ADAS_CMD_50_50ms"]["BCW_RtIndSta"])
 
@@ -330,7 +330,7 @@ class CarState(CarStateBase, EsccCarStateBase, MadsCarState, CarStateExt):
         ("CRUISE_BUTTONS", 1)
       ]
     # BSM message comes from ADAS ECU, which is disabled during openpilot longitudinal control
-    if CP.enableBsm and not CP.openpilotLongitudinalControl:
+    if CP.flags & HyundaiFlags.HAS_BSM and not CP.openpilotLongitudinalControl:
       msgs += [
         ("ADAS_CMD_50_50ms", 20),
       ]
