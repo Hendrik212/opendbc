@@ -797,6 +797,24 @@ class TestHyundaiFingerprint(unittest.TestCase):
     assert RI.updated_messages == set()
     assert RI.pending_radar_can == {}
 
+  def test_radar_interface_keeps_cycle_head_when_end_and_next_start_share_a_packet(self):
+    # pandad packets every 10 ms vs a 30 ms radar cycle: a packet often carries the end of one cycle
+    # and the start of the next. The running cycle's head must still reach the parser.
+    fingerprint = gen_empty_fingerprint()
+    add_radar_range(fingerprint, RADAR_235_248, 1)
+    CP = CarInterface.get_params(CAR.HYUNDAI_SONATA, fingerprint, [], False, False, False)
+    CP_SP = CarParamsSP(flags=HyundaiFlagsSP.RADAR_FULL_RADAR.value)
+    RI = RadarInterface(CP, CP_SP)
+    parser_key = (RADAR_235_248.name, 1)
+    s, e = RADAR_235_248.start_addr, RADAR_235_248.end_addr
+
+    dat = b'\x00' * RADAR_235_248.message_size
+    assert RI.update([(100, [(a, dat, 1) for a in range(s, s + 10)])]) is None
+    radar_data = RI.update([(110, [(a, dat, 1) for a in range(s + 10, e + 1)] + [(s, dat, 1), (s + 1, dat, 1)])])
+    assert radar_data is not None
+    assert RI.seen_radar_addrs[parser_key] == set(RADAR_235_248.address_range)
+    assert RI.pending_radar_can[parser_key] == [(110, [(s, dat, 1), (s + 1, dat, 1)])]
+
   def test_radar_interface_discards_incomplete_cycle_on_next_start(self):
     fingerprint = gen_empty_fingerprint()
     add_radar_range(fingerprint, RADAR_235_248, 1)

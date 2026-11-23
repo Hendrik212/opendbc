@@ -402,32 +402,38 @@ class RadarInterface(RadarInterfaceBase, RadarInterfaceExt):
     radar_cycle_complete = False
     for radar_parser in self.radar_parsers:
       parser_key = (radar_parser.spec.name, radar_parser.bus)
-      filtered_can = []
-      parser_cycle_started = False
-      parser_cycle_complete = False
+      pending_can = self.pending_radar_can.setdefault(parser_key, [])
+      completed_can = []
       cycle_end_timestamps = []
+      # Assemble cycles frame by frame. One CAN packet can hold the end of one cycle and the start
+      # of the next; resetting on "start seen anywhere in the packet" threw away the running cycle's
+      # head, and with pandad's steady 10 ms packets that phase holds long enough for the dropped
+      # slots to time out in the parser (radarTracks canError -> radarState invalid -> commIssue).
       for mono_time, can_messages in can_strings:
-        relevant_messages = [
-          msg for msg in can_messages
-          if msg[2] == radar_parser.bus and radar_parser.spec.start_addr <= msg[0] <= radar_parser.end_addr and
-             len(msg[1]) == radar_parser.spec.message_size
-        ]
-        if relevant_messages:
-          filtered_can.append((mono_time, relevant_messages))
-          parser_cycle_started |= any(msg[0] == radar_parser.spec.start_addr for msg in relevant_messages)
-          parser_cycle_complete |= any(msg[0] == radar_parser.end_addr for msg in relevant_messages)
-          cycle_end_timestamps.extend(mono_time for msg in relevant_messages if msg[0] == radar_parser.end_addr)
-
-      if filtered_can:
-        if parser_cycle_started:
-          self.pending_radar_can.pop(parser_key, None)
-        pending_can = self.pending_radar_can.setdefault(parser_key, [])
-        pending_can.extend(filtered_can)
-        del pending_can[:max(0, len(pending_can) - radar_parser.msg_count * 2)]
-      if not parser_cycle_complete:
+        chunk = []
+        for msg in can_messages:
+          if not (msg[2] == radar_parser.bus and radar_parser.spec.start_addr <= msg[0] <= radar_parser.end_addr and
+                  len(msg[1]) == radar_parser.spec.message_size):
+            continue
+          if msg[0] == radar_parser.spec.start_addr:
+            pending_can.clear()  # leftovers of a cycle whose end we never saw
+            chunk = []
+          chunk.append(msg)
+          if msg[0] == radar_parser.end_addr:
+            pending_can.append((mono_time, chunk))
+            completed_can.extend(pending_can)
+            pending_can.clear()
+            chunk = []
+            cycle_end_timestamps.append(mono_time)
+        if chunk:
+          pending_can.append((mono_time, chunk))
+      del pending_can[:max(0, len(pending_can) - radar_parser.msg_count * 2)]
+      if not pending_can:
+        self.pending_radar_can.pop(parser_key, None)
+      if not completed_can:
         continue
 
-      vls = radar_parser.parser.update(self.pending_radar_can.pop(parser_key, []))
+      vls = radar_parser.parser.update(completed_can)
       relevant_addrs = {
         addr for addr in vls
         if radar_parser.spec.start_addr <= addr <= radar_parser.end_addr
